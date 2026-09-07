@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Skillora - Plateforme Haut de Gamme de Services et Artisans Vérifiés au Cameroun (Douala & Yaoundé)">
+  <title>Skillora — Plateforme d'Artisans & Services d'Élite (Cameroun)</title>
+
+  <!-- Google Fonts: Playfair Display & DM Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,600&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Ambient Glows -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+  <div class="ambient-glow glow-3"></div>
+
+  <!-- Toast Notification -->
+  <div id="skillora-toast" class="toast-notification">
+    <span id="toast-icon">✓</span>
+    <span id="toast-text">Bienvenue sur Skillora</span>
+  </div>
+
+  <div class="app-shell">
+
+    <!-- Top Navigation Header -->
+    <header class="skillora-nav">
+      <!-- Left: Brand (No Senvato, No Interlink) -->
+      <div class="nav-left">
+        <a href="#" class="skillora-brand" onclick="switchAppScreen('role-selection'); return false;">
+          <div class="brand-icon-gem">💎</div>
+          <div class="brand-text-stack">
+            <span class="brand-name">Skillora</span>
+            <span class="brand-tagline">SERVICES HAUT DE GAMME</span>
+          </div>
+        </a>
+      </div>
+
+      <!-- Middle Top: Language Switcher [ EN | FR ] -->
+      <div class="nav-middle">
+        <div class="lang-switcher-pill">
+          <button id="btn-lang-en" class="lang-btn" onclick="setLanguage('en')">🇬🇧 EN</button>
+          <span class="lang-divider">|</span>
+          <button id="btn-lang-fr" class="lang-btn active" onclick="setLanguage('fr')">🇫🇷 FR</button>
+        </div>
+      </div>
+
+      <!-- Right: WhatsApp + Wallet in Franc CFA + Settings Gear -->
+      <div class="nav-right">
+        <!-- Direct WhatsApp Support Button -->
+        <button class="btn-whatsapp-direct" onclick="openWhatsAppChat()">
+          <svg class="whatsapp-svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0012.04 2zm.01 1.67c4.54 0 8.24 3.7 8.24 8.24 0 2.2-.86 4.28-2.42 5.83a8.188 8.188 0 01-5.82 2.41c-1.46 0-2.89-.39-4.14-1.12l-.3-.18-3.08.81.82-3-.19-.31a8.19 8.19 0 01-1.27-4.44c0-4.54 3.7-8.24 8.24-8.24zm4.52 11.64c-.25-.13-1.47-.72-1.7-.81-.23-.08-.39-.13-.56.13-.17.25-.65.81-.8 1-.15.19-.3.21-.55.08-.25-.13-1.07-.39-2.04-1.25-.75-.67-1.26-1.5-1.41-1.75-.15-.25-.02-.39.11-.51.11-.11.25-.29.38-.44.13-.15.17-.25.25-.42.08-.17.04-.32-.02-.44-.06-.13-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.1 0 1.24.9 2.44 1.03 2.61.13.17 1.78 2.72 4.31 3.81.6.26 1.07.41 1.44.53.6.19 1.15.16 1.59.1.49-.07 1.47-.6 1.68-1.18.21-.58.21-1.08.15-1.18-.06-.1-.23-.17-.48-.29z"/>
+          </svg>
+          <span>WhatsApp</span>
+        </button>
+
+        <!-- Top Right Franc CFA Wallet -->
+        <button class="btn-wallet-top" onclick="openWalletModal()">
+          <span class="wallet-icon">💳</span>
+          <div class="wallet-balance-info">
+            <span class="wallet-tag" id="nav-wallet-tag">Portefeuille</span>
+            <span class="wallet-amount" id="nav-wallet-val">0 FCFA</span>
+          </div>
+          <span class="wallet-plus">+</span>
+        </button>
+
+        <!-- Settings Button (Gear) -->
+        <button class="btn-settings-top" onclick="openSettingsModal()" title="Paramètres & Profil">
+          <span>⚙️</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ==========================================================================
+         SCREEN 1: ROLE SELECTION
+         ========================================================================== -->
+    <section id="screen-role-selection" class="app-screen active">
+      <div class="role-hero">
+        <h1 class="role-hero-title">
+          Votre Passerelle vers <span style="color: var(--gold);">l'Expertise Certifiée</span>
+        </h1>
+        <p class="role-hero-sub">
+          Mise en relation directe de clients exigeants avec des artisans individuels et des groupes professionnels certifiés au Cameroun.
+        </p>
+      </div>
+
+      <div class="role-cards">
+        <!-- Client Card -->
+        <div class="luxury-card card-client">
+          <div class="card-image-wrapper">
+            <img src="./Marketplace/public/luxury_client_bg.png" alt="Architecture & Interior">
+            <div class="card-image-overlay"></div>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="card-label">Pour les Clients</div>
+              <h2 class="card-heading">Trouvez des Artisans d'Élite</h2>
+              <p class="card-text">Trouvez des professionnels vérifiés par IA et contrôlés pour vos projets à Douala et Yaoundé.</p>
+              <ul class="feature-list">
+                <li><span class="feature-icon">✓</span> Spécialistes certifiés par IA à Douala & Yaoundé</li>
+                <li><span class="feature-icon">✓</span> Contact direct par WhatsApp avec vos artisans</li>
+                <li><span class="feature-icon">✓</span> Paiements 100% sécurisés par séquestre en Franc CFA (FCFA)</li>
+              </ul>
+            </div>
+            <button class="card-action-btn" onclick="switchAppScreen('client-auth')">
+              Continuer comme Client →
+            </button>
+          </div>
+        </div>
+
+        <!-- Artisan Card (Single & Grouped) -->
+        <div class="luxury-card card-artisan">
+          <div class="card-image-wrapper">
+            <img src="./Marketplace/public/luxury_artisan_bg.png" alt="Artisan Craftsmanship">
+            <div class="card-image-overlay"></div>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="card-label">Pour Artisans & Collectifs</div>
+              <h2 class="card-heading">Proposez vos Compétences</h2>
+              <p class="card-text">Inscrivez-vous en tant qu'Artisan Individuel ou Artisan Groupé (Atelier/Entreprise) pour accéder aux meilleurs chantiers.</p>
+              <ul class="feature-list">
+                <li><span class="feature-icon">✓</span> Choix entre Artisan Seul & Atelier Groupé</li>
+                <li><span class="feature-icon">✓</span> Retraits instantanés en FCFA via MTN MoMo et Orange Money</li>
+                <li><span class="feature-icon">✓</span> Certification progressive en 13 étapes pour booster vos contrats</li>
+              </ul>
+            </div>
+            <button class="card-action-btn" onclick="switchAppScreen('artisan-auth')">
+              Rejoindre comme Professionnel →
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         SCREEN 2: CLIENT AUTH
+         ========================================================================== -->
+    <section id="screen-client-auth" class="app-screen">
+      <div class="auth-wrapper client-theme">
+        <div class="auth-panel">
+          <div class="auth-header">
+            <div class="auth-label">Espace Client</div>
+            <h2 class="auth-title" id="client-auth-title">Connexion Client</h2>
+            <p class="auth-subtitle">Connectez-vous pour réserver des artisans vérifiés au Cameroun.</p>
+          </div>
+
+          <div class="tab-bar">
+            <button id="btn-client-tab-login" class="tab-item active" onclick="switchClientTab('login')">Connexion</button>
+            <button id="btn-client-tab-signup" class="tab-item" onclick="switchClientTab('signup')">Créer un compte</button>
+          </div>
+
+          <!-- Client Login Form -->
+          <form id="form-client-login" onsubmit="handleClientLogin(event)">
+            <div class="field">
+              <label class="field-label">Email ou Téléphone (+237)</label>
+              <div class="input-wrap">
+                <span class="input-icon">✉</span>
+                <input type="text" class="input-field" placeholder="client@skillora.cm or 6xx xx xx xx" required>
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-row">
+                <label class="field-label">Mot de passe</label>
+                <span class="forgot-link" onclick="showSkilloraToast('Lien de réinitialisation envoyé par SMS/Email')">Mot de passe oublié ?</span>
+              </div>
+              <div class="input-wrap">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="client-log-pass" class="input-field" placeholder="••••••••" required>
+                <button type="button" class="pass-toggle" onclick="togglePassVisibility('client-log-pass')">👁</button>
+              </div>
+            </div>
+            <button type="submit" class="submit-btn">Se Connecter →</button>
+          </form>
+
+          <!-- Client Signup Form -->
+          <form id="form-client-signup" style="display:none;" onsubmit="handleClientSignup(event)">
+            <div class="field">
+              <label class="field-label">Nom Complet</label>
+              <div class="input-wrap">
+                <span class="input-icon">👤</span>
+                <input type="text" id="client-reg-name" class="input-field" placeholder="e.g. Valerie Mbida" required>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label">Email</label>
+              <div class="input-wrap">
+                <span class="input-icon">✉</span>
+                <input type="email" class="input-field" placeholder="valerie@example.com" required>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label">Téléphone (WhatsApp)</label>
+              <div class="input-wrap">
+                <span class="input-icon">📞</span>
+                <input type="tel" class="input-field" placeholder="+237 6xx xx xx xx" required>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label">Mot de passe</label>
+              <div class="input-wrap">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="client-reg-pass" class="input-field" placeholder="Minimum 8 caractères" oninput="checkPassStrength(this.value, 'client-str-fill', 'client-str-text')" required>
+                <button type="button" class="pass-toggle" onclick="togglePassVisibility('client-reg-pass')">👁</button>
+              </div>
+              <div class="strength-bar-wrap">
+                <div class="strength-track"><div id="client-str-fill" class="strength-fill"></div></div>
+                <span id="client-str-text" class="strength-text"></span>
+              </div>
+            </div>
+            <button type="submit" class="submit-btn" style="margin-top:1.5rem;">Créer un Compte Client →</button>
+          </form>
+
+          <div class="whatsapp-help-box" onclick="openWhatsAppChat()">
+            <span>💬 Besoin d'aide ? Discutez directement avec nous sur WhatsApp</span>
+          </div>
+
+          <div class="switch-role-footer">
+            <span>Vous êtes un artisan ou une équipe ?</span>
+            <span class="switch-role-link" onclick="switchAppScreen('artisan-auth')">Espace Artisan & Collectifs →</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         SCREEN 3: ARTISAN AUTH (WITH SINGLE VS GROUPED ARTISAN)
+         ========================================================================== -->
+    <section id="screen-artisan-auth" class="app-screen">
+      <div class="auth-wrapper artisan-theme wide">
+        <div class="auth-panel">
+          <div class="auth-header">
+            <div class="auth-label">Pour Artisans & Collectifs</div>
+            <h2 class="auth-title">Inscription Professionnelle</h2>
+            <p class="auth-subtitle">Inscrivez-vous en tant qu'artisan seul ou en groupe/atelier pour recevoir des chantiers.</p>
+          </div>
+
+          <div class="tab-bar">
+            <button id="btn-artisan-tab-login" class="tab-item" onclick="switchArtisanTab('login')">Connexion</button>
+            <button id="btn-artisan-tab-signup" class="tab-item active" onclick="switchArtisanTab('signup')">Inscription (3 Étapes)</button>
+          </div>
+
+          <!-- Artisan Wizard Signup -->
+          <div id="artisan-wizard-box">
+            <!-- Stepper -->
+            <div class="wizard-stepper">
+              <div class="step-track"><div id="artisan-step-progress" class="step-progress" style="width: 0%;"></div></div>
+              <div id="step-node-1" class="step-node active" onclick="goToArtisanStep(1)">
+                <div class="step-circle">1</div>
+                <span class="step-title">Structure</span>
+              </div>
+              <div id="step-node-2" class="step-node" onclick="goToArtisanStep(2)">
+                <div class="step-circle">2</div>
+                <span class="step-title">Métier</span>
+              </div>
+              <div id="step-node-3" class="step-node" onclick="goToArtisanStep(3)">
+                <div class="step-circle">3</div>
+                <span class="step-title">Documents</span>
+              </div>
+            </div>
+
+            <!-- STEP 1: Single vs Grouped Structure & Account -->
+            <div id="artisan-step-1" class="wizard-step-page active">
+              <div class="artisan-type-selector-box">
+                <label class="field-label" style="margin-bottom:0.75rem; display:block;">🌟 Sélectionnez la Structure de l'Artisan :</label>
+                <div class="artisan-type-cards">
+                  <!-- Single Artisan -->
+                  <div id="type-card-single" class="type-card selected" onclick="selectArtisanStructure('SINGLE')">
+                    <div class="type-card-header">
+                      <span class="type-icon">🧑‍🔧</span>
+                      <span id="badge-single" class="type-badge">● Sélectionné</span>
+                    </div>
+                    <h4>Artisan Individuel (Seul)</h4>
+                    <p>Artisan indépendant, technicien à son compte ou spécialiste freelance</p>
+                  </div>
+
+                  <!-- Grouped Artisan -->
+                  <div id="type-card-grouped" class="type-card" onclick="selectArtisanStructure('GROUPED')">
+                    <div class="type-card-header">
+                      <span class="type-icon">👥🏢</span>
+                      <span id="badge-grouped" class="type-badge">○</span>
+                    </div>
+                    <h4>Artisan Groupé (Atelier / Équipe)</h4>
+                    <p>Atelier groupé, coopérative, PME du bâtiment ou équipe multi-spécialités</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Single Artisan Name -->
+              <div id="single-fields-wrap">
+                <div class="field">
+                  <label class="field-label">Nom Complet du Professionnel</label>
+                  <div class="input-wrap">
+                    <span class="input-icon">👤</span>
+                    <input type="text" id="artisan-name-input" class="input-field" placeholder="e.g. Emmanuel Ngu" required>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Grouped Artisan Fields -->
+              <div id="grouped-fields-wrap" style="display:none;">
+                <div class="field">
+                  <label class="field-label">🏢 Nom de l'Entreprise / de l'Atelier Groupé</label>
+                  <div class="input-wrap">
+                    <span class="input-icon">🏷️</span>
+                    <input type="text" id="group-name-input" class="input-field" placeholder="e.g. Atelier Élite Bâtiment & Énergie Cameroun">
+                  </div>
+                </div>
+                <div class="form-two-col">
+                  <div class="field">
+                    <label class="field-label">👤 Chef d'Équipe / Représentant</label>
+                    <div class="input-wrap">
+                      <span class="input-icon">⭐</span>
+                      <input type="text" id="group-lead-input" class="input-field" placeholder="e.g. Jean-Paul Kamga">
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label class="field-label">👥 Nombre de Techniciens</label>
+                    <div class="input-wrap">
+                      <span class="input-icon">🔢</span>
+                      <input type="number" id="group-size-input" class="input-field" placeholder="e.g. 8">
+                    </div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="field-label">📋 N° Registre de Commerce / NIU Fiscal</label>
+                  <div class="input-wrap">
+                    <span class="input-icon">🏛️</span>
+                    <input type="text" class="input-field" placeholder="e.g. RC/DLA/2022/B/1458 - NIU: M05221458921">
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-two-col">
+                <div class="field">
+                  <label class="field-label">Email Pro</label>
+                  <div class="input-wrap">
+                    <span class="input-icon">✉</span>
+                    <input type="email" class="input-field" placeholder="pro@skillora.cm" required>
+                  </div>
+                </div>
+                <!-- Optional Verification Notice Banner (Section 1 & 22) -->
+                <div style="background: rgba(212, 175, 55, 0.1); border: 1px solid var(--border-gold); padding: 1rem; borderRadius: 10px; margin: 1.25rem 0;">
+                  <p style="font-size: 0.82rem; color: var(--gold-light); margin: 0;">
+                    💡 <strong>Information de Vérification :</strong> La vérification est optionnelle. Complétez les étapes pour obtenir le Badge Vérifié (✓) et booster votre visibilité, ou commencez directement sans badge.
+                  </p>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                  <button type="button" class="btn-outline" onclick="skipArtisanVerification()">
+                    ⏩ Ignorer & Commencer
+                  </button>
+                  <button type="button" class="submit-btn" style="margin-top: 0;" onclick="goToArtisanStep(2)">
+                    🛡️ Vérification IA (Étape 2) →
+                  </button>
+                </div>
+              </div>
+
+            <!-- STEP 2: Trade Search & BEPC Level AI Quiz -->
+            <div id="artisan-step-2" class="wizard-step-page" style="display:none;">
+              <div class="field">
+                <label class="field-label">🔎 Rechercher & Sélectionner votre Métier / Spécialité</label>
+                <div class="input-wrap">
+                  <span class="input-icon">🔍</span>
+                  <input
+                    type="text"
+                    id="trade-search-input"
+                    class="input-field"
+                    placeholder="Tapez pour rechercher (ex: Électricien, Plombier, Menuisier, Climatiseur...)"
+                    oninput="filterTradeList(this.value)"
+                  />
+                </div>
+                <div id="trade-search-results" class="trade-search-dropdown" style="display:none;"></div>
+              </div>
+
+              <div className="field" style="margin-top:1rem;">
+                <label class="field-label">Spécialité Validée</label>
+                <input type="text" id="selected-trade-display" class="input-field" value="⚡ Électricien Bâtiment & Solaire" readonly style="background:rgba(212,175,55,0.1); color:var(--gold-light); font-weight:700;" />
+              </div>
+
+              {/* BEPC Level AI Assessment Quiz Block */}
+              <div style="background:rgba(62,180,137,0.08); border:1px solid var(--artisan-border); border-radius:12px; padding:1.25rem; margin:1.25rem 0;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                  <h4 style="color:var(--artisan-accent); font-size:0.95rem; margin:0;">🤖 Évaluation IA - Niveau Examen BEPC / CAP Technique</h4>
+                  <span style="background:var(--artisan-soft); color:var(--artisan-accent); font-size:0.72rem; font-weight:700; padding:0.2rem 0.6rem; border-radius:50px;">BEPC CONFORME</span>
+                </div>
+                <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1rem;">
+                  L'IA va générer des questions pratiques de niveau BEPC/CAP adaptées à votre métier pour évaluer vos connaissances fondamentales.
+                </p>
+
+                <button type="button" class="btn-outline-gold" style="width:100%;" onclick="startBEPCAIQuiz()">
+                  🧪 Démarrer l'Épreuve IA BEPC pour ce Métier →
+                </button>
+
+                <div id="bepc-quiz-container" style="display:none; margin-top:1.25rem; border-top:1px solid rgba(255,255,255,0.1); padding-top:1rem;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                    <span style="font-weight:700; color:#fff; font-size:0.85rem;" id="bepc-q-title">Question 1/3 (BEPC)</span>
+                    <span style="color:var(--gold-light); font-size:0.78rem; font-weight:700;" id="bepc-timer">⏱️ 30s</span>
+                  </div>
+                  <p style="font-size:0.85rem; color:var(--text-cream); margin-bottom:0.85rem;" id="bepc-q-text">
+                    Avant toute intervention électrique résidentielle, quelle est la procédure de sécurité fondamentale (consignation) ?
+                  </p>
+                  <div id="bepc-options-list" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
+                  <div id="bepc-result-box" style="display:none; margin-top:1rem; padding:0.85rem; background:rgba(0,0,0,0.5); border-radius:8px; border:1px solid var(--artisan-border);"></div>
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 2fr; gap:1rem; margin-top:1.5rem;">
+                <button type="button" class="btn-outline" onclick="goToArtisanStep(1)">← Précédent</button>
+                <button type="button" class="submit-btn" style="margin-top:0;" onclick="goToArtisanStep(3)">Étape Suivante (Documents) →</button>
+              </div>
+            </div>
+
+            <!-- STEP 3: Vault Uploads -->
+            <div id="artisan-step-3" class="wizard-step-page" style="display:none;">
+              <div class="upload-zone" onclick="simulateVaultDocUpload('doc-id-log', 'Pièce d\'Identité / Document Fiscal')">
+                <div class="upload-icon">🪪</div>
+                <div class="upload-label">1. Téléverser CNI / Passeport ou Registre Fiscal</div>
+                <div class="upload-hint">PDF, PNG, JPG (Chiffré dans le Coffre Skillora)</div>
+                <div id="doc-id-log" class="upload-success-text"></div>
+              </div>
+
+              <div class="upload-zone" onclick="simulateVaultDocUpload('doc-cv-log', 'Diplômes / Portfolio')">
+                <div class="upload-icon">📄</div>
+                <div class="upload-label">2. Téléverser Diplômes, CV ou Portfolio d'Équipe</div>
+                <div class="upload-hint">PDF (Max 25MB)</div>
+                <div id="doc-cv-log" class="upload-success-text"></div>
+              </div>
+
+              <div class="upload-zone" onclick="simulateVaultDocUpload('doc-vid-log', 'Vidéo de Présentation')">
+                <div class="upload-icon">🎥</div>
+                <div class="upload-label">3. Téléverser Vidéo de Présentation ou Visite d'Atelier</div>
+                <div class="upload-hint">MP4, MOV (Requis pour l'Indice de Confiance IA)</div>
+                <div id="doc-vid-log" class="upload-success-text"></div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 2fr; gap:1rem; margin-top:1.5rem;">
+                <button type="button" class="btn-outline" onclick="goToArtisanStep(2)">← Précédent</button>
+                <button type="button" class="submit-btn" style="margin-top:0;" onclick="submitArtisanRegistration()">Soumettre pour Vérification →</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="switch-role-footer">
+            <span>Vous cherchez plutôt à embaucher des artisans ?</span>
+            <span class="switch-role-link" onclick="switchAppScreen('client-auth')">Espace Client →</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         SCREEN 4: CLIENT DASHBOARD (WITH WHATSAPP & FCFA WALLET)
+         ========================================================================== -->
+    <section id="screen-client-dashboard" class="app-screen">
+      <div class="client-dashboard-container">
+        <!-- Client Profile Header Overview -->
+        <div class="client-profile-header-card">
+          <div class="client-profile-main-info">
+            <div class="client-avatar-large-wrap">
+              <img src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80" alt="Client Avatar" class="client-avatar-img" />
+              <span class="client-verified-badge" title="Client Biométriquement Vérifié">✓</span>
+            </div>
+            <div class="client-profile-details">
+              <div class="client-badge-pill">🇨🇲 CLIENT VÉRIFIÉ • MEMBRE PREMIUM</div>
+              <h1 class="client-profile-name" id="client-user-display">Valerie Mbida</h1>
+              <p class="client-location-sub">📍 Yaoundé (Bastos) & Douala (Akwa) • +237 670 00 00 00</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPI Cards Grid -->
+        <div class="client-kpi-grid">
+          <div class="client-kpi-card" onclick="showSkilloraToast('Navigation vers les réservations')">
+            <div class="kpi-icon-wrap gold">📋</div>
+            <div class="kpi-data">
+              <span class="kpi-number">2</span>
+              <span class="kpi-label">Réservations en cours</span>
+            </div>
+          </div>
+
+          <div class="client-kpi-card" onclick="showSkilloraToast('3 devis reçus d\'artisans')">
+            <div class="kpi-icon-wrap emerald">📥</div>
+            <div class="kpi-data">
+              <span class="kpi-number">3</span>
+              <span class="kpi-label">Demandes & Devis reçus</span>
+            </div>
+          </div>
+
+          <div class="client-kpi-card highlight" onclick="openWalletModal()">
+            <div class="kpi-icon-wrap purple">🔒</div>
+            <div class="kpi-data">
+              <span class="kpi-number">75 000 <small>FCFA</small></span>
+              <span class="kpi-label">Garantie Séquestre Bloquée</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="client-search-bar" style="margin-bottom:1.5rem;">
+          <span class="search-icon">🔍</span>
+          <input type="text" class="client-search-input" placeholder="Rechercher électricien, plombier, menuisier à Douala ou Yaoundé...">
+          <button class="btn-search-action">Rechercher →</button>
+        </div>
+
+        <!-- Filter Bar (All vs Verified vs Solo vs Grouped) -->
+        <div class="category-filter-bar">
+          <button class="filter-pill active" onclick="filterArtisanCategory('ALL')">Tous les Artisans</button>
+          <button class="filter-pill" onclick="filterArtisanCategory('VERIFIED')" style="border-color:var(--artisan-border); color:var(--artisan-accent);">🛡️ Badge Vérifié Uniquement (✓)</button>
+          <button class="filter-pill" onclick="filterArtisanCategory('SINGLE')">🧑‍🔧 Artisans Individuels</button>
+          <button class="filter-pill" onclick="filterArtisanCategory('GROUPED')">🏢 Ateliers & Groupes</button>
+        </div>
+
+        <!-- Artisans Grid -->
+        <div class="artisans-grid" id="artisans-display-grid">
+          <!-- Populated by script.js -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         SCREEN 5: ARTISAN DASHBOARD (WITH KPI & FCFA WITHDRAWALS)
+         ========================================================================== -->
+    <section id="screen-artisan-dashboard" class="app-screen">
+      <div class="artisan-dashboard-container">
+        <!-- Hero Banner -->
+        <div class="artisan-hero-banner">
+          <div class="banner-left">
+            <div class="hud-tag" style="background:rgba(62,180,137,0.15); color:#3eb489;">
+              🛡️ SKILLORA ARTISAN HUB • <span id="artisan-type-badge-top">ARTISAN GROUPÉ</span>
+            </div>
+            <h1 class="banner-title">Espace Pro : <span class="green-name" id="artisan-user-display">Atelier Élite Cameroun</span></h1>
+            <p class="banner-subtitle">Gérez vos contrats, suivez vos versements en Franc CFA et visualisez votre score de vérification progressive.</p>
+          </div>
+        </div>
+
+        <!-- KPI Grid -->
+        <div class="artisan-kpi-grid">
+          <div class="artisan-kpi-card">
+            <span class="kpi-num">14</span>
+            <span class="kpi-title">Missions Complétées</span>
+          </div>
+          <div class="artisan-kpi-card">
+            <span class="kpi-num">4.9 ★</span>
+            <span class="kpi-title">Note Moyenne</span>
+          </div>
+          <div class="artisan-kpi-card">
+            <span class="kpi-num">98%</span>
+            <span class="kpi-title">Score de Fiabilité IA</span>
+          </div>
+          <div class="artisan-kpi-card highlight">
+            <span class="kpi-num">13/13</span>
+            <span class="kpi-title">Étapes de Vérification</span>
+          </div>
+        </div>
+
+        <!-- Artisan Profile & Work Gallery Section -->
+        <div style="background:var(--bg-surface); border:1px solid var(--border-gold); border-radius:16px; padding:1.5rem; margin-bottom:2rem;">
+          <div style="display:flex; flex-direction:column; align-items:center; text-align:center; margin-bottom:1.5rem; position:relative;">
+            <!-- Centralized Avatar -->
+            <div style="width:110px; height:110px; border-radius:50%; border:3px solid var(--gold); padding:4px; background:rgba(0,0,0,0.5); cursor:pointer; margin-bottom:0.75rem; position:relative;" onclick="openArtisanProfileModal(appState.currentUser)" title="Cliquer pour afficher le Profil Complet">
+              <img src="https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" alt="Avatar Profile" />
+              <span style="position:absolute; bottom:2px; right:2px; background:var(--gold); color:#000; font-size:0.7rem; font-weight:800; padding:2px 6px; border-radius:50px;">✓</span>
+            </div>
+
+            <h3 style="color:#fff; font-size:1.3rem; font-weight:700; margin:0;" id="dash-prof-name">Emmanuel Ngu</h3>
+            <span style="color:var(--gold-light); font-size:0.85rem; font-weight:600; margin-top:0.2rem;" id="dash-prof-type">🧑‍🔧 Master Électricien & Solar Specialist</span>
+            
+            <!-- User Bio Section -->
+            <div style="max-width:550px; margin:0.85rem auto 1rem; background:rgba(0,0,0,0.3); border:1px solid var(--border-subtle); padding:0.85rem 1.1rem; border-radius:10px;">
+              <p style="font-size:0.84rem; color:var(--text-cream); line-height:1.5; margin:0;" id="dash-prof-bio">
+                "Artisan certifié Master avec plus de 8 ans d'expérience en électricité générale, armoires haute tension et installations solaires résidentielles au Cameroun."
+              </p>
+            </div>
+
+            <!-- Action Buttons: Share Link & Client Requests Page -->
+            <div style="display:flex; gap:0.75rem; flex-wrap:wrap; justify-content:center;">
+              <button type="button" class="btn-outline-gold" style="font-size:0.82rem; padding:0.5rem 1rem;" onclick="shareArtisanProfileLink()">
+                🔗 Partager mon Profil
+              </button>
+              <button type="button" class="btn-primary-gold" style="font-size:0.82rem; padding:0.5rem 1rem;" onclick="switchAppScreen('requests-page')">
+                📥 Voir mes Demandes Clients (<span id="req-count-badge">3</span>)
+              </button>
+            </div>
+          </div>
+
+          {/* Work Gallery Section (3 Photos per Album Post) */}
+          <div style="border-top:1px solid rgba(255,255,255,0.1); padding-top:1.25rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+              <div>
+                <h4 style="color:var(--gold-light); font-size:1rem; margin:0;">📸 Galerie des Réalisations (Albums de 3 Photos)</h4>
+                <p style="font-size:0.78rem; color:var(--text-muted); margin:0;">Les clients voient vos projets terminés ici</p>
+              </div>
+              <button type="button" class="btn-outline" style="font-size:0.8rem; padding:0.4rem 0.85rem;" onclick="triggerGalleryUploader()" title="Ajouter un projet dans la galerie">
+                ➕ Importer Photos
+              </button>
+            </div>
+
+            <div id="artisan-gallery-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:1.25rem;">
+              {/* Sample Album Post (3 Photos) */}
+              <div style="background:rgba(0,0,0,0.4); border:1px solid var(--border-subtle); border-radius:12px; padding:0.85rem; position:relative;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                  <span style="font-size:0.8rem; font-weight:700; color:#fff;">⚡ Installation Solaire Villa Bastos</span>
+                  <span style="font-size:0.7rem; color:var(--text-dim);">3 Photos</span>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px; border-radius:8px; overflow:hidden;">
+                  <img src="https://images.unsplash.com/photo-1508873696983-2df515122519?auto=format&fit=crop&w=300&q=80" style="width:100%; height:75px; object-fit:cover;" />
+                  <img src="https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=300&q=80" style="width:100%; height:75px; object-fit:cover;" />
+                  <img src="https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=300&q=80" style="width:100%; height:75px; object-fit:cover;" />
+                </div>
+                <!-- Plus (+) Cross Button to add photos to gallery -->
+                <button type="button" style="position:absolute; bottom:-10px; right:12px; width:28px; height:28px; border-radius:50%; background:var(--gold); border:none; color:#000; font-weight:900; font-size:1rem; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 10px rgba(0,0,0,0.5);" onclick="triggerGalleryUploader()" title="Ajouter des photos à l'album">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Jobs -->
+        <h2 class="section-heading-lux">📋 Missions & Contrats en Cours</h2>
+        <div class="jobs-list">
+          <div class="job-card-luxury">
+            <div class="job-card-header">
+              <div>
+                <span class="job-id-tag">JOB-301</span>
+                <h3 class="job-title">Installation Tableau Électrique Triphasé & Onduleur Solaire</h3>
+                <p class="job-meta">👤 Client: <strong>Sarah Connor</strong> • 📍 Douala (Bonapriso) • 🕒 Aujourd'hui, 14:00</p>
+              </div>
+              <div class="job-price-box">
+                <span class="job-price-figure">180 000 FCFA</span>
+                <span class="job-escrow-badge">🔒 Séquestre Verrouillé</span>
+              </div>
+            </div>
+            <div class="job-card-footer">
+              <button class="btn-whatsapp-card" onclick="openWhatsAppChat('Sarah Connor')">
+                <svg class="whatsapp-svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0012.04 2zm.01 1.67c4.54 0 8.24 3.7 8.24 8.24 0 2.2-.86 4.28-2.42 5.83a8.188 8.188 0 01-5.82 2.41c-1.46 0-2.89-.39-4.14-1.12l-.3-.18-3.08.81.82-3-.19-.31a8.19 8.19 0 01-1.27-4.44c0-4.54 3.7-8.24 8.24-8.24zm4.52 11.64c-.25-.13-1.47-.72-1.7-.81-.23-.08-.39-.13-.56.13-.17.25-.65.81-.8 1-.15.19-.3.21-.55.08-.25-.13-1.07-.39-2.04-1.25-.75-.67-1.26-1.5-1.41-1.75-.15-.25-.02-.39.11-.51.11-.11.25-.29.38-.44.13-.15.17-.25.25-.42.08-.17.04-.32-.02-.44-.06-.13-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.1 0 1.24.9 2.44 1.03 2.61.13.17 1.78 2.72 4.31 3.81.6.26 1.07.41 1.44.53.6.19 1.15.16 1.59.1.49-.07 1.47-.6 1.68-1.18.21-.58.21-1.08.15-1.18-.06-.1-.23-.17-.48-.29z"/>
+                </svg>
+                <span>Contacter Client (WhatsApp)</span>
+              </button>
+              <button class="btn-accept-job" onclick="showSkilloraToast('Mission acceptée ! Séquestre validé.')">
+                Accepter la Mission →
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         SCREEN 6: CLIENT REQUESTS PAGE (DEDICATED PAGE FOR ARTISAN)
+         ========================================================================== -->
+    <section id="screen-requests-page" class="app-screen">
+      <div class="artisan-dashboard-container" style="max-width:900px; margin:0 auto; padding:2rem 1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
+          <div>
+            <h1 style="font-family:var(--font-serif); font-size:1.8rem; color:#fff; margin:0;">📥 Demandes de Services Clients</h1>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-top:0.2rem;">Consultez et répondez directement aux demandes envoyées par les clients</p>
+          </div>
+          <button type="button" class="btn-outline-gold" onclick="switchAppScreen('artisan-dashboard')">← Retour au Dashboard</button>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:1.25rem;">
+          <!-- Request Card 1 -->
+          <div style="background:var(--bg-surface); border:1px solid var(--border-gold); border-radius:14px; padding:1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.5rem;">
+              <div>
+                <span style="background:rgba(212,175,55,0.15); color:var(--gold-light); font-size:0.72rem; font-weight:700; padding:0.2rem 0.5rem; border-radius:50px;">DEMANDE NOUVELLE</span>
+                <h3 style="color:#fff; font-size:1.1rem; margin:0.3rem 0 0.1rem;">⚡ Dépannage Tableau Électrique & Court-Circuit</h3>
+                <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">👤 Client: <strong>Marcelle T.</strong> • 📍 Douala (Akwa) • 🕒 Reçu il y a 25 min</p>
+              </div>
+              <span style="font-size:1.1rem; font-weight:800; color:var(--gold-light);">45 000 FCFA</span>
+            </div>
+            <p style="font-size:0.84rem; color:var(--text-cream); background:rgba(0,0,0,0.3); padding:0.75rem; border-radius:8px; margin:0;">
+              "Bonjour, notre disjoncteur principal saute dès qu'on allume la climatisation du salon. Besoin d'une intervention urgente aujourd'hui."
+            </p>
+            <div style="display:flex; gap:0.75rem; justify-content:flex-end;">
+              <button class="btn-whatsapp-card" onclick="openWhatsAppChat('Marcelle T.')">💬 Discuter WhatsApp</button>
+              <button class="btn-primary-gold" style="font-size:0.82rem; padding:0.45rem 1rem;" onclick="showSkilloraToast('Proposition transmise au client !')">Accepter & Envoyer Devis →</button>
+            </div>
+          </div>
+
+          <!-- Request Card 2 -->
+          <div style="background:var(--bg-surface); border:1px solid var(--border-subtle); border-radius:14px; padding:1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.5rem;">
+              <div>
+                <span style="background:rgba(78,154,125,0.15); color:#3eb489; font-size:0.72rem; font-weight:700; padding:0.2rem 0.5rem; border-radius:50px;">EN DISCUSSION</span>
+                <h3 style="color:#fff; font-size:1.1rem; margin:0.3rem 0 0.1rem;">☀️ Installation Kit Solaire Hybride 5kVA</h3>
+                <p style="font-size:0.82rem; color:var(--text-muted); margin:0;">👤 Client: <strong>Société Kaba & Co</strong> • 📍 Yaoundé (Bastos) • 🕒 Hier</p>
+              </div>
+              <span style="font-size:1.1rem; font-weight:800; color:#3eb489;">850 000 FCFA</span>
+            </div>
+            <p style="font-size:0.84rem; color:var(--text-cream); background:rgba(0,0,0,0.3); padding:0.75rem; border-radius:8px; margin:0;">
+              "Demande de devis complet pour dimensionnement et pose de 8 panneaux solaires avec batteries lithium pour nos bureaux."
+            </p>
+            <div style="display:flex; gap:0.75rem; justify-content:flex-end;">
+              <button class="btn-whatsapp-card" onclick="openWhatsAppChat('Société Kaba & Co')">💬 Ouvrir WhatsApp</button>
+              <button class="btn-outline-gold" style="font-size:0.82rem; padding:0.45rem 1rem;" onclick="showSkilloraToast('Devis transmis au client !')">Finaliser le Contrat →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ==========================================================================
+       MODAL 0: FULL ARTISAN PROFILE VIEW (EXACT MATCH TO USER SCREENSHOTS)
+       ========================================================================== -->
+  <div id="modal-artisan-profile" class="modal-backdrop-luxury" style="display:none; align-items:flex-start; padding-top:2rem; overflow-y:auto;">
+    <div class="settings-modal-card" style="max-width:580px; width:100%; border-radius:18px; padding:0; overflow:hidden; background:#0b0f19; border:1px solid rgba(255,255,255,0.15);">
+      
+      <!-- Top Banner Hero Image -->
+      <div style="position:relative; width:100%; height:230px; background:#000;">
+        <img id="modal-artisan-img" src="https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80" style="width:100%; height:100%; object-fit:cover;" />
+        <button class="modal-close-btn" style="position:absolute; top:12px; left:12px; background:rgba(0,0,0,0.6); border:none; width:36px; height:36px; border-radius:50%; color:#fff; font-size:1.1rem; cursor:pointer;" onclick="closeArtisanProfileModal()">←</button>
+        <button style="position:absolute; top:12px; right:12px; background:rgba(0,0,0,0.6); border:none; width:36px; height:36px; border-radius:50%; color:#fff; font-size:1.1rem; cursor:pointer;" onclick="shareArtisanProfileLink()">♡</button>
+      </div>
+
+      {/* Profile Header Details */}
+      <div style="padding:1.25rem 1.25rem 0.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <div>
+            <h2 id="modal-artisan-title" style="font-size:1.35rem; font-weight:800; color:#fff; margin:0 0 0.2rem;">Sanitary plumbing (toilet/sink/shower)</h2>
+            <p id="modal-artisan-sub" style="font-size:0.9rem; color:var(--text-muted); margin:0;">Derreck plomb <span style="background:rgba(255,255,255,0.1); padding:1px 5px; border-radius:4px; font-size:0.7rem; color:#fff; font-weight:700;">EN</span> <span style="background:rgba(255,255,255,0.1); padding:1px 5px; border-radius:4px; font-size:0.7rem; color:#fff; font-weight:700;">FR</span></p>
+            <p id="modal-artisan-loc" style="font-size:0.82rem; color:var(--text-dim); margin:0.3rem 0 0;">📍 Yaoundé</p>
+          </div>
+          <span id="modal-artisan-rating" style="background:#3eb489; color:#fff; font-size:0.85rem; font-weight:800; padding:0.25rem 0.65rem; border-radius:50px;">★ 5.0 (4 Reviews)</span>
+        </div>
+
+        {/* Skill Tags Pills */}
+        <div style="display:flex; flex-wrap:wrap; gap:0.4rem; margin:1.1rem 0;">
+          <span style="background:rgba(62,180,137,0.15); color:#3eb489; font-size:0.75rem; font-weight:600; padding:0.3rem 0.65rem; border-radius:50px;">Sanitary plumbing (toilet/sink/shower)</span>
+          <span style="background:rgba(62,180,137,0.15); color:#3eb489; font-size:0.75rem; font-weight:600; padding:0.3rem 0.65rem; border-radius:50px;">Household Plumbing</span>
+          <span style="background:rgba(62,180,137,0.15); color:#3eb489; font-size:0.75rem; font-weight:600; padding:0.3rem 0.65rem; border-radius:50px;">Maintenance Work</span>
+          <span style="background:rgba(62,180,137,0.15); color:#3eb489; font-size:0.75rem; font-weight:600; padding:0.3rem 0.65rem; border-radius:50px;">Home renovation</span>
+        </div>
+
+        {/* About / Bio Section */}
+        <div style="margin-bottom:1.25rem;">
+          <h3 style="font-size:1.05rem; font-weight:700; color:#fff; margin-bottom:0.5rem;">About</h3>
+          <p id="modal-artisan-bio" style="font-size:0.85rem; color:var(--text-cream); line-height:1.6; margin:0;">
+            Je suis un <strong>plombier professionnel basé à Yaoundé</strong>, spécialisé dans l'<strong>installation complète de systèmes de plomberie</strong> pour les maisons et bâtiments. J'interviens pour les <strong>réseaux d'alimentation en eau chaude et froide</strong>, les <strong>évacuations</strong>, le <strong>drainage</strong>, la <strong>rénovation</strong> et la <strong>maintenance</strong>.
+          </p>
+        </div>
+
+        {/* Experience Section */}
+        <div style="margin-bottom:1.25rem;">
+          <h3 style="font-size:1.05rem; font-weight:700; color:#fff; margin-bottom:0.2rem;">Experience</h3>
+          <p id="modal-artisan-exp" style="font-size:0.85rem; color:var(--text-muted); margin:0;">05 ans d'expérience sur le terrain</p>
+        </div>
+
+        {/* Call / WhatsApp / Share Action Bar (Exact match to screenshot) */}
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.75rem; margin-bottom:1.5rem;">
+          <button type="button" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:14px; padding:0.75rem; color:#fff; display:flex; flex-direction:column; align-items:center; gap:0.3rem; cursor:pointer;" onclick="window.open('tel:+237675421099')">
+            <span style="font-size:1.3rem;">📞</span>
+            <span style="font-size:0.78rem; font-weight:700;">Call</span>
+          </button>
+
+          <button type="button" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:14px; padding:0.75rem; color:#fff; display:flex; flex-direction:column; align-items:center; gap:0.3rem; cursor:pointer;" onclick="openWhatsAppChat('Derreck plomb')">
+            <span style="font-size:1.3rem; color:#25d366;">💬</span>
+            <span style="font-size:0.78rem; font-weight:700;">WhatsApp</span>
+          </button>
+
+          <button type="button" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:14px; padding:0.75rem; color:#fff; display:flex; flex-direction:column; align-items:center; gap:0.3rem; cursor:pointer;" onclick="shareArtisanProfileLink()">
+            <span style="font-size:1.3rem;">🔗</span>
+            <span style="font-size:0.78rem; font-weight:700;">Share</span>
+          </button>
+        </div>
+
+        {/* Gallery Section (10 items Grid from screenshot) */}
+        <div style="margin-bottom:1.5rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+            <h3 style="font-size:1.05rem; font-weight:700; color:#fff; margin:0; display:flex; align-items:center; gap:0.4rem;">
+              🖼️ Gallery <span style="font-size:0.85rem; font-weight:400; color:var(--text-muted);">(10 items)</span>
+            </h3>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem;">
+            <img src="https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=400&q=80" style="width:100%; height:130px; border-radius:10px; object-fit:cover;" />
+            <img src="https://images.unsplash.com/photo-1508873696983-2df515122519?auto=format&fit=crop&w=400&q=80" style="width:100%; height:130px; border-radius:10px; object-fit:cover;" />
+            <img src="https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=400&q=80" style="width:100%; height:130px; border-radius:10px; object-fit:cover;" />
+            <img src="https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=400&q=80" style="width:100%; height:130px; border-radius:10px; object-fit:cover;" />
+            <img src="https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=400&q=80" style="width:100%; height:130px; border-radius:10px; object-fit:cover;" />
+            <img src="https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=400&q=80" style="width:100%; height:130px; border-radius:10px; object-fit:cover;" />
+          </div>
+        </div>
+
+        {/* Reviews Section (From screenshot) */}
+        <div style="margin-bottom:1.5rem; border-top:1px solid rgba(255,255,255,0.1); padding-top:1.25rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <h3 style="font-size:1.05rem; font-weight:700; color:#fff; margin:0;">Reviews</h3>
+            <button type="button" style="background:transparent; border:1px solid #3eb489; color:#3eb489; font-size:0.78rem; font-weight:700; padding:0.35rem 0.75rem; border-radius:50px; cursor:pointer;" onclick="showSkilloraToast('Formulaire d\'avis ouvert')">✍️ Write a Review</button>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:1rem;">
+            <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); padding:0.85rem; border-radius:10px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.2rem;">
+                <strong style="color:#fff; font-size:0.85rem;">Jacqueline Hob Ekambi</strong>
+                <span style="font-size:0.72rem; color:var(--text-dim);">4 days ago</span>
+              </div>
+              <div style="color:#3eb489; font-size:0.75rem; margin-bottom:0.3rem;">★★★★★</div>
+              <p style="font-size:0.82rem; color:var(--text-cream); margin:0;">Disponible et très efficace</p>
+            </div>
+
+            <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); padding:0.85rem; border-radius:10px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.2rem;">
+                <strong style="color:#fff; font-size:0.85rem;">Fadimatou Zahra</strong>
+                <span style="font-size:0.72rem; color:var(--text-dim);">2 weeks ago</span>
+              </div>
+              <div style="color:#3eb489; font-size:0.75rem; margin-bottom:0.3rem;">★★★★★</div>
+              <p style="font-size:0.82rem; color:var(--text-cream); margin:0;">Très satisfaite des services rendus par le prestataire avec gentillesse et courtoisie. Merci Mr Derreck</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div id="modal-wallet" class="modal-backdrop-luxury" style="display:none;">
+    <div class="wallet-modal-card">
+      <div class="wallet-modal-header">
+        <div class="wallet-header-title">
+          <span class="wallet-title-icon">💳</span>
+          <div>
+            <h2>Portefeuille Numérique Skillora</h2>
+            <p class="wallet-subtitle">Paiements sécurisés en Franc CFA (FCFA) avec Mobile Money Cameroun</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closeWalletModal()">✕</button>
+      </div>
+
+      <!-- Balance Card -->
+      <div class="wallet-balance-banner">
+        <div>
+          <span class="balance-label">Solde Actuel Disponible</span>
+          <h1 class="balance-figure"><span id="modal-balance-display">350 000</span> <span class="currency-tag">FCFA</span></h1>
+          <span class="currency-sub">Franc CFA d'Afrique Centrale (XAF)</span>
+        </div>
+        <div class="balance-badges">
+          <span class="badge-payment mtn">MTN MoMo (*126#)</span>
+          <span class="badge-payment orange">Orange Money (#150#)</span>
+        </div>
+      </div>
+
+      <!-- Deposit vs Withdraw Tabs -->
+      <div class="wallet-tab-switch">
+        <button id="wtab-deposit" class="w-tab-btn active" onclick="switchWalletTab('deposit')">📥 Recharger / Dépôt</button>
+        <button id="wtab-withdraw" class="w-tab-btn" onclick="switchWalletTab('withdraw')">📤 Retrait Mobile Money</button>
+      </div>
+
+      <!-- Payment Providers -->
+      <label class="section-mini-label">Sélectionnez le Moyen de Paiement :</label>
+      <div class="provider-cards-grid">
+        <div id="pcard-mtn" class="provider-card mtn-card selected" onclick="selectPaymentProvider('MTN')">
+          <div class="provider-header">
+            <div class="provider-logo-badge mtn-bg">MTN</div>
+            <span id="pcheck-mtn" class="provider-check">● Sélectionné</span>
+          </div>
+          <div class="provider-body">
+            <h3>MTN Mobile Money</h3>
+            <p>Dépôt et retrait instantané via *126# Cameroun</p>
+          </div>
+        </div>
+
+        <div id="pcard-orange" class="provider-card orange-card" onclick="selectPaymentProvider('ORANGE')">
+          <div class="provider-header">
+            <div class="provider-logo-badge orange-bg">ORANGE</div>
+            <span id="pcheck-orange" class="provider-check">○</span>
+          </div>
+          <div class="provider-body">
+            <h3>Orange Money</h3>
+            <p>Dépôt et retrait instantané via #150# Cameroun</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Form -->
+      <form onsubmit="handleWalletTransactionSubmit(event)">
+        <div class="field">
+          <label class="field-label">Montant en Franc CFA (FCFA)</label>
+          <div class="amount-input-wrapper">
+            <input type="number" id="wallet-amount-input" class="luxury-amount-input" value="25000" min="500" step="500" required>
+            <span class="amount-unit">FCFA</span>
+          </div>
+          <div class="preset-amounts">
+            <button type="button" class="preset-btn" onclick="setPresetAmount(5000)">+5 000</button>
+            <button type="button" class="preset-btn" onclick="setPresetAmount(25000)">+25 000</button>
+            <button type="button" class="preset-btn" onclick="setPresetAmount(50000)">+50 000</button>
+            <button type="button" class="preset-btn" onclick="setPresetAmount(100000)">+100 000</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">Numéro Mobile Money (+237)</label>
+          <div class="phone-input-wrapper">
+            <span class="phone-prefix">🇨🇲 +237</span>
+            <input type="tel" id="wallet-phone-input" class="luxury-phone-input" value="670 00 00 00" required>
+          </div>
+          <span class="phone-helper" id="wallet-phone-helper">Vous recevrez un prompt MTN MoMo sur votre téléphone pour valider avec votre code PIN.</span>
+        </div>
+
+        <button type="submit" id="btn-wallet-action-submit" class="btn-process-payment mtn">
+          Recharger via MTN MoMo (25 000 FCFA) →
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       MODAL 2: SETTINGS & PROFILE (Profile Info, Edit Profile, Legal, Logout)
+       ========================================================================== -->
+  <div id="modal-settings" class="modal-backdrop-luxury" style="display:none;">
+    <div class="settings-modal-card">
+      <div class="settings-modal-header">
+        <div class="settings-header-title">
+          <span class="settings-title-icon">⚙️</span>
+          <div>
+            <h2>Paramètres du Compte & Profil</h2>
+            <p class="settings-subtitle">Gérez vos informations personnelles, vos préférences et la sécurité</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closeSettingsModal()">✕</button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="settings-tab-nav">
+        <button id="stab-profile" class="settings-nav-btn active" onclick="switchSettingsTab('profile')">👤 Informations</button>
+        <button id="stab-edit" class="settings-nav-btn" onclick="switchSettingsTab('edit')">✏️ Modifier Profil</button>
+        <button id="stab-legal" class="settings-nav-btn" onclick="switchSettingsTab('legal')">📜 Mentions Légales</button>
+      </div>
+
+      <!-- Tab Content: Profile View -->
+      <div id="scontent-profile">
+        <div class="profile-hero-card">
+          <div class="profile-avatar-large">
+            <span id="set-avatar-char">E</span>
+            <span class="verified-badge-pill">✓ VÉRIFIÉ</span>
+          </div>
+          <div class="profile-hero-details">
+            <h3 id="set-name-disp">Emmanuel Ngu</h3>
+            <span class="role-tag-luxury" id="set-role-disp">Artisan Groupé (Atelier Élite)</span>
+            <p class="profile-city-text" id="set-city-disp">📍 Douala & Yaoundé • 🇨🇲 Cameroun</p>
+          </div>
+        </div>
+
+        <div class="profile-info-grid">
+          <div class="info-item">
+            <span class="info-label">Email</span>
+            <span class="info-value" id="set-email-disp">emmanuel.pro@skillora.cm</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Téléphone</span>
+            <span class="info-value" id="set-phone-disp">+237 675 42 10 99</span>
+          </div>
+          <div class="info-item full-width">
+            <span class="info-label">Bio & Spécialités</span>
+            <p class="info-bio-value" id="set-bio-disp">Artisan certifié Master avec plus de 8 ans d'expérience en ingénierie électrique, armoires haute tension et solaire au Cameroun.</p>
+          </div>
+        </div>
+
+        <div class="settings-actions-footer">
+          <button class="btn-outline-gold" onclick="switchSettingsTab('edit')">Modifier les Informations ✏️</button>
+          <button class="btn-danger-logout" onclick="logoutSkillora()">🚪 Se Déconnecter</button>
+        </div>
+      </div>
+
+      <!-- Tab Content: Edit Form -->
+      <div id="scontent-edit" style="display:none;">
+        <form onsubmit="handleProfileEditSubmit(event)">
+          <div class="field">
+            <label class="field-label">Nom Complet / Nom d'Atelier</label>
+            <input type="text" id="edit-name" class="luxury-input-full" value="Emmanuel Ngu" required>
+          </div>
+          <div class="form-two-col">
+            <div class="field">
+              <label class="field-label">Email</label>
+              <input type="email" id="edit-email" class="luxury-input-full" value="emmanuel.pro@skillora.cm" required>
+            </div>
+            <div class="field">
+              <label class="field-label">Téléphone</label>
+              <input type="tel" id="edit-phone" class="luxury-input-full" value="+237 675 42 10 99" required>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label">Ville / Quartier</label>
+            <input type="text" id="edit-city" class="luxury-input-full" value="Douala (Akwa) & Yaoundé (Bastos)">
+          </div>
+          <div class="field">
+            <label class="field-label">Bio</label>
+            <textarea id="edit-bio" class="luxury-textarea-full" rows="3">Artisan certifié Master avec plus de 8 ans d'expérience en électricité, armoires haute tension et énergie solaire au Cameroun.</textarea>
+          </div>
+          <div class="settings-actions-footer">
+            <button type="button" class="btn-secondary" onclick="switchSettingsTab('profile')">Annuler</button>
+            <button type="submit" class="btn-primary-gold">Enregistrer les Modifications ✓</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Tab Content: Legal & Terms -->
+      <div id="scontent-legal" style="display:none;">
+        <div class="legal-section-block">
+          <h4>📜 Conditions d'Utilisation & Charte de Vérification</h4>
+          <p>Toutes les transactions sur Skillora sont protégées par notre garantie séquestre en Franc CFA (FCFA). Les artisans individuels et groupés font l'objet d'audits d'identité, de certifications et de contrôle qualité conformément aux lois camerounaises.</p>
+        </div>
+        <div class="legal-section-block">
+          <h4>🔒 Politique de Séquestre MTN MoMo & Orange Money</h4>
+          <p>Les fonds sont conservés sous séquestre jusqu'à validation de la mission par le client. Les versements sont immédiats sur le compte Mobile Money de l'artisan.</p>
+        </div>
+        <div class="settings-actions-footer">
+          <button class="btn-secondary" onclick="switchSettingsTab('profile')">Retour</button>
+          <button class="btn-danger-logout" onclick="logoutSkillora()">🚪 Se Déconnecter</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Engine -->
+  <script src="script.js"></script>
+</body>
+</html>

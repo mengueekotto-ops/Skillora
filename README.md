@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # AI-Based Platform Connecting Customers and Artisans
 
 > An intelligent, secure, and user-friendly service marketplace that connects customers with verified artisans and skilled professionals using Artificial Intelligence.
@@ -142,3 +143,6 @@ Artificial Intelligence serves as the primary engine for platform efficiency and
 ## 🏆 Expected Outcome
 
 A robust, scalable, and secure AI-driven platform that streamlines how customers discover, evaluate, and hire trustworthy artisans, while empowering skilled professionals with tools to manage and scale their services efficiently.
+=======
+# Skillora
+>>>>>>> b488c75b00df24062759f8f036fda3b567376cfe

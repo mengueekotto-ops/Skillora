@@ -1,14 +1,13 @@
 require("dotenv").config();
 const bcrypt = require("bcryptjs");
-const { sequelize, connectDB } = require("../config/database");
+const { connectDB } = require("../config/database");
 const { User, Professional, Category, Service, ServiceRequest, Review, Notification } = require("../models");
 
 const seedDatabase = async () => {
   try {
-    console.log("🌱 Seeding INTERLINK with 60+ Professions & Cameroon Localization (Senvato Specification)...");
+    console.log("🌱 Seeding Skillora with 60+ Professions & Cameroon Localization...");
     await connectDB();
-    await sequelize.sync({ force: true });
-    console.log("💥 Database reset for comprehensive seeding.");
+    await User.init();
 
     // 60+ PROFESSIONS CATALOG ACROSS 10 TRADE SECTORS
     const categoriesData = [
@@ -353,39 +352,50 @@ const seedDatabase = async () => {
       },
     ];
 
-    const categories = await Category.bulkCreate(categoriesData);
-    console.log(`✅ Seeded ${categories.length} detailed profession categories!`);
+    let categories = await Category.find();
+    if (categories.length === 0) {
+      categories = await Category.insertMany(categoriesData);
+      console.log(`✅ Seeded ${categories.length} detailed profession categories!`);
+    } else {
+      console.log(`ℹ️ Categories already exist (${categories.length} found).`);
+    }
 
     const hashedPassword = await bcrypt.hash("Password123!", 10);
 
     // 2. Seed Admin User
-    await User.create({
-      firstName: "System",
-      lastName: "Administrator",
-      email: "admin@interlink.com",
-      phone: "+237600000000",
-      password: hashedPassword,
-      role: "ADMIN",
-      location: "Yaoundé, Centre",
-    });
+    const existingAdmin = await User.findOne({ email: "admin@skillora.com" });
+    if (!existingAdmin) {
+      await User.create({
+        firstName: "System",
+        lastName: "Administrator",
+        email: "admin@skillora.com",
+        phone: "+237600000000",
+        password: hashedPassword,
+        role: "ADMIN",
+        location: "Yaoundé, Centre",
+      });
+    }
 
     // 3. Seed Customer User
-    const customerUser = await User.create({
-      firstName: "Alice",
-      lastName: "Smith",
-      email: "customer@interlink.com",
-      phone: "+237699887766",
-      password: hashedPassword,
-      role: "CUSTOMER",
-      location: "Biyem-Assi, Yaoundé",
-    });
+    let customerUser = await User.findOne({ email: "customer@skillora.cm" });
+    if (!customerUser) {
+      customerUser = await User.create({
+        firstName: "Alice",
+        lastName: "Smith",
+        email: "customer@skillora.cm",
+        phone: "+237699887766",
+        password: hashedPassword,
+        role: "CUSTOMER",
+        location: "Biyem-Assi, Yaoundé",
+      });
+    }
 
     // 4. Seed Representative Professionals across Cameroon Neighborhoods (Yaoundé, Douala, Bepanda)
     const profs = [
       {
         firstName: "Jean-Paul",
         lastName: "Mbarga",
-        email: "john.electrician@interlink.com",
+        email: "john.electrician@skillora.cm",
         phone: "+237677112233",
         role: "PROFESSIONAL",
         location: "Bepanda, Douala",
@@ -395,7 +405,8 @@ const seedDatabase = async () => {
         experience: 8,
         skills: ["Generator connection", "Breaker box panels", "Fault finding", "Grounding", "Spot lighting"],
         education: "BTS Génie Électrique",
-        verificationStatus: "TRUSTED",
+        verificationStatus: "verified",
+        verifiedBadge: true,
         verificationScore: 94.5,
         rating: 4.9,
         completedMissions: 18,
@@ -406,7 +417,7 @@ const seedDatabase = async () => {
       {
         firstName: "Samuel",
         lastName: "Eto",
-        email: "robert.plumber@interlink.com",
+        email: "robert.plumber@skillora.cm",
         phone: "+237699445566",
         role: "PROFESSIONAL",
         location: "Biyem-Assi, Yaoundé",
@@ -416,7 +427,8 @@ const seedDatabase = async () => {
         experience: 6,
         skills: ["Water heater installation", "Anti-damp treatment", "Anti-mold", "Drain unclogging"],
         education: "CAP Plomberie Sanitaire",
-        verificationStatus: "VERIFIED",
+        verificationStatus: "verified",
+        verifiedBadge: true,
         verificationScore: 88.0,
         rating: 4.8,
         completedMissions: 14,
@@ -427,7 +439,7 @@ const seedDatabase = async () => {
       {
         firstName: "Marie-Louise",
         lastName: "Nguene",
-        email: "marie.accountant@interlink.com",
+        email: "marie.accountant@skillora.cm",
         phone: "+237677889900",
         role: "PROFESSIONAL",
         location: "Akwa, Douala",
@@ -437,7 +449,8 @@ const seedDatabase = async () => {
         experience: 9,
         skills: ["Bookkeeping", "Tax filing", "Payroll", "Invoicing", "OHADA Auditing"],
         education: "Master Finance & Comptabilité",
-        verificationStatus: "EXPERT",
+        verificationStatus: "verified",
+        verifiedBadge: true,
         verificationScore: 99.0,
         rating: 5.0,
         completedMissions: 32,
@@ -448,7 +461,7 @@ const seedDatabase = async () => {
       {
         firstName: "Christian",
         lastName: "Kamga",
-        email: "ads.specialist@interlink.com",
+        email: "ads.specialist@skillora.cm",
         phone: "+237655112233",
         role: "PROFESSIONAL",
         location: "Bastos, Yaoundé",
@@ -458,7 +471,8 @@ const seedDatabase = async () => {
         experience: 5,
         skills: ["Meta Ads", "WhatsApp Marketing", "Lead Generation", "Graphic Design"],
         education: "B.Sc. Digital Marketing",
-        verificationStatus: "TRUSTED",
+        verificationStatus: "verified",
+        verifiedBadge: true,
         verificationScore: 91.0,
         rating: 4.9,
         completedMissions: 20,
@@ -469,7 +483,7 @@ const seedDatabase = async () => {
       {
         firstName: "Sandrine",
         lastName: "Fotso",
-        email: "actress@interlink.com",
+        email: "actress@skillora.cm",
         phone: "+237699001122",
         role: "PROFESSIONAL",
         location: "Bonapriso, Douala",
@@ -479,7 +493,8 @@ const seedDatabase = async () => {
         experience: 6,
         skills: ["Acting", "Commercial Voiceover", "Event Hosting", "Bilingual EN/FR"],
         education: "Performing Arts Diploma",
-        verificationStatus: "VERIFIED",
+        verificationStatus: "unverified",
+        verifiedBadge: false,
         verificationScore: 89.0,
         rating: 4.8,
         completedMissions: 16,
@@ -490,50 +505,65 @@ const seedDatabase = async () => {
     ];
 
     for (const p of profs) {
-      const user = await User.create({
-        firstName: p.firstName,
-        lastName: p.lastName,
-        email: p.email,
-        phone: p.phone,
-        password: hashedPassword,
-        role: p.role,
-        location: p.location,
-        profileImage: p.profileImage,
-      });
+      let user = await User.findOne({ email: p.email });
+      if (!user) {
+        user = await User.create({
+          firstName: p.firstName,
+          lastName: p.lastName,
+          email: p.email,
+          phone: p.phone,
+          password: hashedPassword,
+          role: p.role,
+          location: p.location,
+          profileImage: p.profileImage,
+        });
+      }
 
-      const profProfile = await Professional.create({
-        userId: user.id,
-        profession: p.profession,
-        bio: p.bio,
-        experience: p.experience,
-        skills: p.skills,
-        education: p.education,
-        verificationStatus: p.verificationStatus,
-        verificationScore: p.verificationScore,
-        rating: p.rating,
-        completedMissions: p.completedMissions,
-      });
+      let profProfile = await Professional.findOne({ userId: user._id });
+      if (!profProfile) {
+        profProfile = await Professional.create({
+          userId: user._id,
+          profession: p.profession,
+          bio: p.bio,
+          experience: p.experience,
+          skills: p.skills,
+          education: p.education,
+          verificationStatus: p.verificationStatus,
+          verifiedBadge: p.verifiedBadge,
+          verificationScore: p.verificationScore,
+          rating: p.rating,
+          completedMissions: p.completedMissions,
+        });
+      }
 
-      await Service.create({
-        professionalId: profProfile.id,
-        categoryId: categories[p.catIndex].id,
-        title: p.serviceTitle,
-        description: `Professional service package by ${p.firstName} ${p.lastName}.`,
-        price: p.servicePrice,
-        location: p.location,
-      });
+      const categoryDoc = categories[p.catIndex] || categories[0];
+      const existingService = await Service.findOne({ professionalId: profProfile._id, title: p.serviceTitle });
+      if (!existingService) {
+        await Service.create({
+          professionalId: profProfile._id,
+          categoryId: categoryDoc._id,
+          title: p.serviceTitle,
+          description: `Professional service package by ${p.firstName} ${p.lastName}.`,
+          price: p.servicePrice,
+          location: p.location,
+          status: "ACTIVE",
+        });
+      }
 
-      await Review.create({
-        customerId: customerUser.id,
-        professionalId: profProfile.id,
-        rating: p.rating,
-        comment: `Excellent service in ${p.location}! Highly recommended.`,
-        qualityRating: 5.0,
-        professionalismRating: 5.0,
-        communicationRating: 4.8,
-        punctualityRating: 5.0,
-        reliabilityRating: 5.0,
-      });
+      const existingReview = await Review.findOne({ professionalId: profProfile._id, customerId: customerUser._id });
+      if (!existingReview) {
+        await Review.create({
+          customerId: customerUser._id,
+          professionalId: profProfile._id,
+          rating: p.rating,
+          comment: `Excellent service in ${p.location}! Highly recommended.`,
+          qualityRating: 5.0,
+          professionalismRating: 5.0,
+          communicationRating: 4.8,
+          punctualityRating: 5.0,
+          reliabilityRating: 5.0,
+        });
+      }
     }
 
     console.log("🎉 Seeding complete! 64 Professions, Cameroon localizations & bilingual support ready.");

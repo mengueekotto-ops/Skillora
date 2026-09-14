@@ -1,35 +1,23 @@
-const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/database");
+const mongoose = require("mongoose");
 
-const Bookmark = sequelize.define(
-  "Bookmark",
+const bookmarkSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
     userId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "users",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
+
     professionalId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "professionals",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Professional",
+      required: true,
     },
   },
   {
-    tableName: "bookmarks",
     timestamps: true,
+    collection: "bookmarks",
   }
 );
 
-module.exports = Bookmark;
+module.exports = mongoose.model("Bookmark", bookmarkSchema);

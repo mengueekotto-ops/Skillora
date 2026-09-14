@@ -1,60 +1,74 @@
-const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/database");
+const mongoose = require("mongoose");
 
-const User = sequelize.define(
-  "User",
+const userSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
     firstName: {
-      type: DataTypes.STRING,
-      allowNull: false,
+      type: String,
+      required: true,
+      trim: true,
     },
+
     lastName: {
-      type: DataTypes.STRING,
-      allowNull: false,
+      type: String,
+      required: true,
+      trim: true,
     },
+
     email: {
-      type: DataTypes.STRING,
-      allowNull: false,
+      type: String,
+      required: true,
       unique: true,
-      validate: {
-        isEmail: true,
-      },
+      lowercase: true,
+      trim: true,
+      index: true,
     },
+
     phone: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: String,
+      default: null,
+      trim: true,
     },
+
     password: {
-      type: DataTypes.STRING,
-      allowNull: false,
+      type: String,
+      required: true,
     },
+
     role: {
-      type: DataTypes.ENUM("CUSTOMER", "PROFESSIONAL", "ADMIN"),
-      allowNull: false,
-      defaultValue: "CUSTOMER",
+      type: String,
+      enum: ["CUSTOMER", "PROFESSIONAL", "ADMIN"],
+      default: "CUSTOMER",
     },
+
     profileImage: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: String,
+      default: null,
     },
+
     location: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: String,
+      default: null,
     },
+
     isActive: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true,
+      type: Boolean,
+      default: true,
     },
   },
   {
-    tableName: "users",
     timestamps: true,
+    collection: "users",
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
-module.exports = User;
+// Explicit unique index on email
+userSchema.index({ email: 1 }, { unique: true });
+
+// Virtual id field
+userSchema.virtual("id").get(function () {
+  return this._id.toHexString();
+});
+
+module.exports = mongoose.model("User", userSchema);

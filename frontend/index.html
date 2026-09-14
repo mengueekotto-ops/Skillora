@@ -81,61 +81,110 @@
          SCREEN 1: ROLE SELECTION
          ========================================================================== -->
     <section id="screen-role-selection" class="app-screen active">
-      <div class="role-hero">
-        <h1 class="role-hero-title">
-          Votre Passerelle vers <span style="color: var(--gold);">l'Expertise Certifiée</span>
-        </h1>
-        <p class="role-hero-sub">
-          Mise en relation directe de clients exigeants avec des artisans individuels et des groupes professionnels certifiés au Cameroun.
-        </p>
-      </div>
+      <div class="sk-hero-section">
 
-      <div class="role-cards">
-        <!-- Client Card -->
-        <div class="luxury-card card-client">
-          <div class="card-image-wrapper">
-            <img src="./Marketplace/public/luxury_client_bg.png" alt="Architecture & Interior">
-            <div class="card-image-overlay"></div>
+        <!-- Cinematic Background: Crossfading Artisan Photos -->
+        <div class="sk-hero-bg">
+          <div class="sk-hero-bg-slide active">
+            <img src="https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=1920&q=80" alt="Électricien au travail">
           </div>
-          <div class="card-body">
-            <div>
-              <div class="card-label">Pour les Clients</div>
-              <h2 class="card-heading">Trouvez des Artisans d'Élite</h2>
-              <p class="card-text">Trouvez des professionnels vérifiés par IA et contrôlés pour vos projets à Douala et Yaoundé.</p>
-              <ul class="feature-list">
-                <li><span class="feature-icon">✓</span> Spécialistes certifiés par IA à Douala & Yaoundé</li>
-                <li><span class="feature-icon">✓</span> Contact direct par WhatsApp avec vos artisans</li>
-                <li><span class="feature-icon">✓</span> Paiements 100% sécurisés par séquestre en Franc CFA (FCFA)</li>
-              </ul>
-            </div>
-            <button class="card-action-btn" onclick="switchAppScreen('client-auth')">
-              Continuer comme Client →
-            </button>
+          <div class="sk-hero-bg-slide">
+            <img src="https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=1920&q=80" alt="Menuisier artisan">
+          </div>
+          <div class="sk-hero-bg-slide">
+            <img src="https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=1920&q=80" alt="Plombier professionnel">
+          </div>
+          <div class="sk-hero-bg-slide">
+            <img src="https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=1920&q=80" alt="Soudeur en action">
+          </div>
+          <div class="sk-hero-bg-slide">
+            <img src="https://images.unsplash.com/photo-1558618666-fcd25c85f82e?auto=format&fit=crop&w=1920&q=80" alt="Tailleur couturier">
           </div>
         </div>
 
-        <!-- Artisan Card (Single & Grouped) -->
-        <div class="luxury-card card-artisan">
-          <div class="card-image-wrapper">
-            <img src="./Marketplace/public/luxury_artisan_bg.png" alt="Artisan Craftsmanship">
-            <div class="card-image-overlay"></div>
-          </div>
-          <div class="card-body">
-            <div>
-              <div class="card-label">Pour Artisans & Collectifs</div>
-              <h2 class="card-heading">Proposez vos Compétences</h2>
-              <p class="card-text">Inscrivez-vous en tant qu'Artisan Individuel ou Artisan Groupé (Atelier/Entreprise) pour accéder aux meilleurs chantiers.</p>
-              <ul class="feature-list">
-                <li><span class="feature-icon">✓</span> Choix entre Artisan Seul & Atelier Groupé</li>
-                <li><span class="feature-icon">✓</span> Retraits instantanés en FCFA via MTN MoMo et Orange Money</li>
-                <li><span class="feature-icon">✓</span> Certification progressive en 13 étapes pour booster vos contrats</li>
-              </ul>
+        <!-- Dark Glassmorphism Overlay -->
+        <div class="sk-hero-overlay"></div>
+
+        <!-- Hero Main Content -->
+        <div class="sk-hero-content">
+          <div class="sk-hero-badge">✨ Plateforme N°1 au Cameroun</div>
+
+          <h1 class="sk-hero-headline">
+            Trouvez <span class="sk-gold">l'Artisan Parfait</span><br>
+            pour Chaque Projet
+          </h1>
+
+          <p class="sk-hero-subtitle">
+            Des électriciens, plombiers, menuisiers, mécaniciens et couturiers vérifiés — à portée de clic, à Douala et Yaoundé.
+          </p>
+
+          <!-- Client Pathway: Floating Search Bar -->
+          <div class="sk-search-wrapper">
+            <div class="sk-search-bar">
+              <span class="sk-search-icon">🔍</span>
+              <input type="text" class="sk-search-input" id="hero-search-input" placeholder="Que cherchez-vous ? Électricien, Plombier, Menuisier..." onkeydown="if(event.key==='Enter') handleHeroSearch()">
+              <button class="sk-search-btn" onclick="handleHeroSearch()">Chercher</button>
             </div>
-            <button class="card-action-btn" onclick="switchAppScreen('artisan-auth')">
-              Rejoindre comme Professionnel →
+          </div>
+
+          <!-- Category Chips -->
+          <div class="sk-chips-row">
+            <button class="sk-chip" onclick="handleCategoryChip('Électricien')">
+              <span class="sk-chip-icon">⚡</span> Électricien
+            </button>
+            <button class="sk-chip" onclick="handleCategoryChip('Plombier')">
+              <span class="sk-chip-icon">🔧</span> Plombier
+            </button>
+            <button class="sk-chip" onclick="handleCategoryChip('Menuisier')">
+              <span class="sk-chip-icon">🪚</span> Menuisier
+            </button>
+            <button class="sk-chip" onclick="handleCategoryChip('Climatisation')">
+              <span class="sk-chip-icon">❄️</span> Climatisation
+            </button>
+            <button class="sk-chip" onclick="handleCategoryChip('Mécanique')">
+              <span class="sk-chip-icon">🚗</span> Mécanique
+            </button>
+            <button class="sk-chip" onclick="handleCategoryChip('Couture')">
+              <span class="sk-chip-icon">🧵</span> Couture
             </button>
           </div>
+
+          <!-- Artisan CTA -->
+          <button class="sk-artisan-cta" onclick="switchAppScreen('artisan-auth')">
+            🔥 Rejoindre comme Artisan — Développez votre Activité →
+          </button>
         </div>
+
+        <!-- Artisan Carousel -->
+        <div class="sk-carousel-section">
+          <div class="sk-carousel-title">Nos <span>Artisans d'Élite</span> Vérifiés</div>
+          <div class="sk-carousel-track-wrapper">
+            <div class="sk-carousel-track" id="sk-carousel-track">
+              <!-- Cards injected by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats Trust Bar -->
+        <div class="sk-stats-bar">
+          <div class="sk-stat-item">
+            <span class="sk-stat-number" data-target="500">0</span>
+            <span class="sk-stat-label">Artisans Vérifiés</span>
+          </div>
+          <div class="sk-stat-item">
+            <span class="sk-stat-number" data-target="10000">0</span>
+            <span class="sk-stat-label">Projets Réalisés</span>
+          </div>
+          <div class="sk-stat-item">
+            <span class="sk-stat-number" data-target="4.8" data-decimal="true">0</span>
+            <span class="sk-stat-label">Note Moyenne ★</span>
+          </div>
+          <div class="sk-stat-item">
+            <span class="sk-stat-number">2</span>
+            <span class="sk-stat-label">Villes Couvertes</span>
+          </div>
+        </div>
+
       </div>
     </section>
 

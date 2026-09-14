@@ -1,51 +1,44 @@
-const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/database");
+const mongoose = require("mongoose");
 
-const VerificationAnswer = sequelize.define(
-  "VerificationAnswer",
+const verificationAnswerSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
     questionId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "verification_questions",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "VerificationQuestion",
+      required: true,
     },
     artisanId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "professionals",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Professional",
+      required: true,
     },
     answer: {
-      type: DataTypes.TEXT,
-      allowNull: false,
+      type: String,
+      required: true,
     },
     aiScore: {
-      type: DataTypes.FLOAT,
-      defaultValue: 0.0,
+      type: Number,
+      default: 0.0,
     },
     aiFeedback: {
-      type: DataTypes.TEXT,
-      allowNull: true,
+      type: String,
+      default: null,
     },
     passed: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
+      type: Boolean,
+      default: false,
     },
   },
   {
-    tableName: "verification_answers",
     timestamps: true,
+    collection: "verification_answers",
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
-module.exports = VerificationAnswer;
+verificationAnswerSchema.virtual("id").get(function () {
+  return this._id.toHexString();
+});
+
+module.exports = mongoose.model("VerificationAnswer", verificationAnswerSchema);

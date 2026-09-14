@@ -7,6 +7,8 @@ const {
   completeVerification,
   skipVerification,
   getVerificationStatus,
+  startQuizVerification,
+  submitQuizResult,
 } = require("../controllers/verification.controllers");
 
 router.post("/start", startVerification);
@@ -16,4 +18,9 @@ router.post("/:id/upload-document", uploadDocument);
 router.post("/:id/complete", completeVerification);
 router.get("/:artisanId/status", getVerificationStatus);
 
+// ── Automated MCQ Quiz Routes ──────────────────────────────────────────────────
+router.post("/quiz/start", startQuizVerification);
+router.post("/quiz/submit", submitQuizResult);
+
 module.exports = router;
+

@@ -12,9 +12,7 @@ const createRequest = async (req, res, next) => {
       });
     }
 
-    const targetProf = await Professional.findByPk(professionalId, {
-      include: [{ model: User, as: "user" }],
-    });
+    const targetProf = await Professional.findById(professionalId).populate("userId");
 
     if (!targetProf) {
       return res.status(404).json({
@@ -24,22 +22,24 @@ const createRequest = async (req, res, next) => {
     }
 
     const serviceRequest = await ServiceRequest.create({
-      customerId: req.user.id,
+      customerId: req.user._id,
       professionalId,
-      serviceId,
-      description,
-      location: location || req.user.location,
-      scheduledDate,
+      serviceId: serviceId || null,
+      description: description.trim(),
+      location: location ? location.trim() : req.user.location,
+      scheduledDate: scheduledDate || null,
       status: "PENDING",
     });
 
     // Notify Professional
-    await Notification.create({
-      userId: targetProf.user.id,
-      title: "New Service Request",
-      message: `You have received a new service request from ${req.user.firstName} ${req.user.lastName}.`,
-      type: "REQUEST",
-    });
+    if (targetProf.userId) {
+      await Notification.create({
+        userId: targetProf.userId._id,
+        title: "New Service Request",
+        message: `You have received a new service request from ${req.user.firstName} ${req.user.lastName}.`,
+        type: "REQUEST",
+      });
+    }
 
     return res.status(201).json({
       success: true,
@@ -54,33 +54,28 @@ const createRequest = async (req, res, next) => {
 const getAllRequests = async (req, res, next) => {
   try {
     const { status } = req.query || {};
-    let where = {};
+    const query = {};
 
-    if (status) where.status = status;
+    if (status && status !== "ALL") query.status = status.toUpperCase();
 
     if (req.user.role === "CUSTOMER" || req.user.role === "CLIENT") {
-      where.customerId = req.user.id;
+      query.customerId = req.user._id;
     } else if (req.user.role === "PROFESSIONAL" || req.user.role === "ARTISAN") {
-      const prof = await Professional.findOne({ where: { userId: req.user.id } });
+      const prof = await Professional.findOne({ userId: req.user._id });
       if (!prof) {
         return res.json({ success: true, data: [] });
       }
-      where.professionalId = prof.id;
+      query.professionalId = prof._id;
     }
 
-    const requests = await ServiceRequest.findAll({
-      where,
-      include: [
-        { model: User, as: "customer", attributes: ["id", "firstName", "lastName", "email", "phone", "profileImage"] },
-        {
-          model: Professional,
-          as: "professional",
-          include: [{ model: User, as: "user", attributes: ["firstName", "lastName", "phone", "profileImage"] }],
-        },
-        { model: Service, as: "service" },
-      ],
-      order: [["createdAt", "DESC"]],
-    });
+    const requests = await ServiceRequest.find(query)
+      .populate("customerId", "firstName lastName email phone profileImage location")
+      .populate({
+        path: "professionalId",
+        populate: { path: "userId", select: "firstName lastName phone profileImage location" },
+      })
+      .populate("serviceId", "title price image")
+      .sort({ createdAt: -1 });
 
     return res.json({
       success: true,
@@ -93,17 +88,13 @@ const getAllRequests = async (req, res, next) => {
 
 const getRequestById = async (req, res, next) => {
   try {
-    const serviceRequest = await ServiceRequest.findByPk(req.params.id, {
-      include: [
-        { model: User, as: "customer", attributes: ["id", "firstName", "lastName", "email", "phone", "profileImage"] },
-        {
-          model: Professional,
-          as: "professional",
-          include: [{ model: User, as: "user", attributes: ["firstName", "lastName", "phone", "profileImage"] }],
-        },
-        { model: Service, as: "service" },
-      ],
-    });
+    const serviceRequest = await ServiceRequest.findById(req.params.id)
+      .populate("customerId", "firstName lastName email phone profileImage location")
+      .populate({
+        path: "professionalId",
+        populate: { path: "userId", select: "firstName lastName phone profileImage location" },
+      })
+      .populate("serviceId", "title price image");
 
     if (!serviceRequest) {
       return res.status(404).json({
@@ -133,12 +124,12 @@ const updateRequestStatus = async (req, res, next) => {
       });
     }
 
-    const serviceRequest = await ServiceRequest.findByPk(req.params.id, {
-      include: [
-        { model: User, as: "customer" },
-        { model: Professional, as: "professional", include: [{ model: User, as: "user" }] },
-      ],
-    });
+    const serviceRequest = await ServiceRequest.findById(req.params.id)
+      .populate("customerId")
+      .populate({
+        path: "professionalId",
+        populate: { path: "userId" },
+      });
 
     if (!serviceRequest) {
       return res.status(404).json({
@@ -151,21 +142,27 @@ const updateRequestStatus = async (req, res, next) => {
     await serviceRequest.save();
 
     if (status === "COMPLETED") {
-      const prof = serviceRequest.professional;
+      const prof = await Professional.findById(serviceRequest.professionalId._id || serviceRequest.professionalId);
       if (prof) {
         prof.completedMissions = (prof.completedMissions || 0) + 1;
         await prof.save();
-        await updateVerificationProgression(prof.id);
+        await updateVerificationProgression(prof._id);
       }
     }
 
-    const notifyUser = req.user.id === serviceRequest.customerId ? serviceRequest.professional.user.id : serviceRequest.customerId;
-    await Notification.create({
-      userId: notifyUser,
-      title: `Mission Request Status Updated: ${status}`,
-      message: `The status of your service request #${serviceRequest.id.substring(0, 8)} has changed to ${status}.`,
-      type: "REQUEST_UPDATE",
-    });
+    const targetUserId =
+      req.user._id.toString() === serviceRequest.customerId._id.toString()
+        ? serviceRequest.professionalId?.userId?._id
+        : serviceRequest.customerId?._id;
+
+    if (targetUserId) {
+      await Notification.create({
+        userId: targetUserId,
+        title: `Mission Request Status Updated: ${status}`,
+        message: `The status of your service request has changed to ${status}.`,
+        type: "REQUEST_UPDATE",
+      });
+    }
 
     return res.json({
       success: true,
@@ -179,15 +176,13 @@ const updateRequestStatus = async (req, res, next) => {
 
 const deleteRequest = async (req, res, next) => {
   try {
-    const serviceRequest = await ServiceRequest.findByPk(req.params.id);
+    const serviceRequest = await ServiceRequest.findByIdAndDelete(req.params.id);
     if (!serviceRequest) {
       return res.status(404).json({
         success: false,
         message: "Service request not found.",
       });
     }
-
-    await serviceRequest.destroy();
 
     return res.json({
       success: true,

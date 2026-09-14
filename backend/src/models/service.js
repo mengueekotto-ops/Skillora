@@ -1,56 +1,61 @@
-const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/database");
+const mongoose = require("mongoose");
 
-const Service = sequelize.define(
-  "Service",
+const serviceSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
     professionalId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "professionals",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Professional",
+      required: true,
     },
+
     categoryId: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: {
-        model: "categories",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      default: null,
     },
+
     title: {
-      type: DataTypes.STRING,
-      allowNull: false,
+      type: String,
+      required: true,
+      trim: true,
     },
+
     description: {
-      type: DataTypes.TEXT,
-      allowNull: true,
+      type: String,
+      default: null,
     },
+
     price: {
-      type: DataTypes.FLOAT,
-      allowNull: false,
-      defaultValue: 0.0,
+      type: Number,
+      required: true,
+      default: 0,
     },
+
     location: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: String,
+      default: null,
     },
+
+    image: {
+      type: String,
+      default: null,
+    },
+
+    gallery: {
+      type: [String],
+      default: [],
+    },
+
     status: {
-      type: DataTypes.ENUM("ACTIVE", "INACTIVE"),
-      defaultValue: "ACTIVE",
+      type: String,
+      enum: ["ACTIVE", "INACTIVE"],
+      default: "ACTIVE",
     },
   },
   {
-    tableName: "services",
     timestamps: true,
+    collection: "services",
   }
 );
 
-module.exports = Service;
+module.exports = mongoose.model("Service", serviceSchema);

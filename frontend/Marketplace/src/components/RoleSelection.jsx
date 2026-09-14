@@ -87,6 +87,40 @@ export default function RoleSelection({ onSelectRole, t }) {
           </div>
         </div>
       </div>
+
+      {/* Discreet Super Admin Portal Access */}
+      <div style={{ marginTop: '3rem', textAlign: 'center' }}>
+        <button
+          onClick={() => onSelectRole('admin-auth')}
+          style={{
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            color: 'rgba(255, 255, 255, 0.45)',
+            fontSize: '0.82rem',
+            padding: '8px 20px',
+            borderRadius: '999px',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            letterSpacing: '0.5px',
+            transition: 'all 0.25s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'rgba(255, 184, 0, 0.5)';
+            e.currentTarget.style.color = '#ffb800';
+            e.currentTarget.style.background = 'rgba(255, 184, 0, 0.08)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+            e.currentTarget.style.color = 'rgba(255, 255, 255, 0.45)';
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+          }}
+        >
+          <span>🛡️</span>
+          <span>{t.adminPortal || 'Super Admin Portal'}</span>
+        </button>
+      </div>
     </section>
   );
 }

@@ -1,121 +1,154 @@
-const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/database");
+const mongoose = require("mongoose");
 
-const Professional = sequelize.define(
-  "Professional",
+const professionalSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
     userId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "users",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
+
     artisanType: {
-      type: DataTypes.ENUM("SINGLE", "GROUPED"),
-      defaultValue: "SINGLE",
+      type: String,
+      enum: ["SINGLE", "GROUPED"],
+      default: "SINGLE",
     },
+
     groupName: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: String,
+      default: null,
     },
+
     groupSize: {
-      type: DataTypes.INTEGER,
-      defaultValue: 1,
+      type: Number,
+      default: 1,
     },
+
     groupRegNum: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: String,
+      default: null,
     },
+
     leadName: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: String,
+      default: null,
     },
+
     profession: {
-      type: DataTypes.STRING,
-      allowNull: false,
+      type: String,
+      required: true,
+      trim: true,
     },
+
     bio: {
-      type: DataTypes.TEXT,
-      allowNull: true,
+      type: String,
+      default: null,
     },
+
     experience: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0,
+      type: Number,
+      default: 0,
     },
+
     skills: {
-      type: DataTypes.JSON,
-      defaultValue: [],
+      type: [String],
+      default: [],
     },
+
     education: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: String,
+      default: null,
     },
+
     certifications: {
-      type: DataTypes.JSON,
-      defaultValue: [],
+      type: [String],
+      default: [],
     },
+
     cvUrl: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: String,
+      default: null,
     },
+
     videoUrl: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: String,
+      default: null,
     },
-    // Optional verification status tracking: unverified, pending, verified, failed
+
+    coverPhoto: {
+      type: String,
+      default: null,
+    },
+
+    portfolio: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
+
+    // Optional verification status
     verificationStatus: {
-      type: DataTypes.ENUM("unverified", "pending", "verified", "failed"),
-      defaultValue: "unverified",
-      field: "verification_status",
+      type: String,
+      enum: ["unverified", "pending", "verified", "failed"],
+      default: "unverified",
     },
+
     verificationDate: {
-      type: DataTypes.DATE,
-      allowNull: true,
-      field: "verification_date",
+      type: Date,
+      default: null,
     },
+
     verificationScore: {
-      type: DataTypes.FLOAT,
-      defaultValue: 0.0,
-      field: "verification_score",
+      type: Number,
+      default: 0,
     },
+
     verifiedBadge: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      field: "verified_badge",
+      type: Boolean,
+      default: false,
     },
+
     verificationAttempts: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0,
-      field: "verification_attempts",
+      type: Number,
+      default: 0,
     },
+
     rating: {
-      type: DataTypes.FLOAT,
-      defaultValue: 0.0,
+      type: Number,
+      default: 0,
     },
+
     completedMissions: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0,
+      type: Number,
+      default: 0,
     },
+
     walletBalance: {
-      type: DataTypes.INTEGER,
-      defaultValue: 350000, // FCFA
+      type: Number,
+      default: 350000, // FCFA
     },
+
     availability: {
-      type: DataTypes.JSON,
-      defaultValue: { isAvailable: true, schedule: "Mon-Fri 8:00 - 18:00" },
+      isAvailable: {
+        type: Boolean,
+        default: true,
+      },
+
+      schedule: {
+        type: String,
+        default: "Mon-Fri 8:00 - 18:00",
+      },
     },
   },
   {
-    tableName: "professionals",
     timestamps: true,
+    collection: "professionals",
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
-module.exports = Professional;
+professionalSchema.virtual("id").get(function () {
+  return this._id.toHexString();
+});
+
+module.exports = mongoose.model("Professional", professionalSchema);

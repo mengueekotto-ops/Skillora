@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ImageCapturePicker from './ImageCapturePicker';
 
 export default function SettingsModal({
   isOpen,
@@ -17,7 +18,8 @@ export default function SettingsModal({
     role: currentUser?.role || 'PROFESSIONAL',
     artisanType: currentUser?.artisanType || 'Grouped Artisan (Master Workshop)',
     city: currentUser?.city || 'Yaoundé (Bastos)',
-    bio: currentUser?.bio || 'Certified Master Artisan with 8+ years specializing in electrical engineering, high-voltage panels and solar inverter installations in Cameroon.'
+    bio: currentUser?.bio || 'Certified Master Artisan with 8+ years specializing in electrical engineering, high-voltage panels and solar inverter installations in Cameroon.',
+    profileImage: currentUser?.profileImage || currentUser?.avatar || ''
   });
 
   if (!isOpen) return null;
@@ -30,6 +32,16 @@ export default function SettingsModal({
     });
     triggerToast(t.editSuccess, '✓');
     setActiveTab('profile');
+  };
+
+  const handleAvatarChange = (newUrl) => {
+    setFormData((prev) => ({ ...prev, profileImage: newUrl }));
+    setCurrentUser({
+      ...currentUser,
+      ...formData,
+      profileImage: newUrl,
+      avatar: newUrl
+    });
   };
 
   return (
@@ -74,9 +86,29 @@ export default function SettingsModal({
           {activeTab === 'profile' && (
             <div className="settings-profile-view">
               <div className="profile-hero-card">
-                <div className="profile-avatar-large">
-                  <span>{formData.name.charAt(0)}</span>
+                <div className="profile-avatar-large-container">
+                  {formData.profileImage ? (
+                    <img
+                      src={formData.profileImage}
+                      alt={formData.name}
+                      className="profile-avatar-img-round"
+                    />
+                  ) : (
+                    <div className="profile-avatar-large">
+                      <span>{formData.name.charAt(0)}</span>
+                    </div>
+                  )}
                   <span className="verified-badge-pill">✓ VERIFIED</span>
+
+                  <ImageCapturePicker
+                    value={formData.profileImage}
+                    onChange={handleAvatarChange}
+                    triggerToast={triggerToast}
+                    label="Photo de profil"
+                    aspectRatio="square"
+                    className="avatar-inline-picker"
+                    buttonText="📷 Modifier photo"
+                  />
                 </div>
                 <div className="profile-hero-details">
                   <h3>{formData.name}</h3>
@@ -122,6 +154,31 @@ export default function SettingsModal({
           {/* TAB 2: EDIT PROFILE */}
           {activeTab === 'edit' && (
             <form onSubmit={handleSaveProfile} className="settings-edit-form">
+              <div className="form-field-group avatar-edit-section">
+                <label className="field-label">Photo de profil (Galerie ou Caméra)</label>
+                <div className="avatar-edit-preview-row">
+                  {formData.profileImage ? (
+                    <img
+                      src={formData.profileImage}
+                      alt="Avatar"
+                      className="avatar-edit-thumb"
+                    />
+                  ) : (
+                    <div className="avatar-edit-placeholder">
+                      {formData.name.charAt(0)}
+                    </div>
+                  )}
+                  <ImageCapturePicker
+                    value={formData.profileImage}
+                    onChange={handleAvatarChange}
+                    triggerToast={triggerToast}
+                    label="Photo de profil"
+                    aspectRatio="square"
+                    buttonText="📁 Choisir / 📷 Caméra"
+                  />
+                </div>
+              </div>
+
               <div className="form-field-group">
                 <label className="field-label">{t.fullName}</label>
                 <input

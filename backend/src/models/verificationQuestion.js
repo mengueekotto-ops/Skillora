@@ -1,43 +1,39 @@
-const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/database");
+const mongoose = require("mongoose");
 
-const VerificationQuestion = sequelize.define(
-  "VerificationQuestion",
+const verificationQuestionSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
     verificationId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "verifications",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Verification",
+      required: true,
     },
     question: {
-      type: DataTypes.TEXT,
-      allowNull: false,
+      type: String,
+      required: true,
     },
     expectedAnswer: {
-      type: DataTypes.TEXT,
-      allowNull: true,
+      type: String,
+      default: null,
     },
     profession: {
-      type: DataTypes.STRING,
-      allowNull: false,
+      type: String,
+      required: true,
     },
     weight: {
-      type: DataTypes.INTEGER,
-      defaultValue: 33,
+      type: Number,
+      default: 33,
     },
   },
   {
-    tableName: "verification_questions",
     timestamps: true,
+    collection: "verification_questions",
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
-module.exports = VerificationQuestion;
+verificationQuestionSchema.virtual("id").get(function () {
+  return this._id.toHexString();
+});
+
+module.exports = mongoose.model("VerificationQuestion", verificationQuestionSchema);

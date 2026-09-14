@@ -11,11 +11,12 @@ const toggleBookmark = async (req, res, next) => {
     }
 
     const existing = await Bookmark.findOne({
-      where: { userId: req.user.id, professionalId },
+      userId: req.user._id,
+      professionalId,
     });
 
     if (existing) {
-      await existing.destroy();
+      await Bookmark.findByIdAndDelete(existing._id);
       return res.json({
         success: true,
         message: "Removed from My Favorites.",
@@ -23,7 +24,7 @@ const toggleBookmark = async (req, res, next) => {
       });
     } else {
       await Bookmark.create({
-        userId: req.user.id,
+        userId: req.user._id,
         professionalId,
       });
       return res.json({
@@ -39,23 +40,29 @@ const toggleBookmark = async (req, res, next) => {
 
 const getUserBookmarks = async (req, res, next) => {
   try {
-    const bookmarks = await Bookmark.findAll({
-      where: { userId: req.user.id },
-      include: [
-        {
-          model: Professional,
-          as: "professional",
-          include: [
-            { model: User, as: "user", attributes: ["id", "firstName", "lastName", "email", "phone", "profileImage", "location"] },
-            { model: Service, as: "services" },
-          ],
-        },
-      ],
-    });
+    const bookmarks = await Bookmark.find({ userId: req.user._id })
+      .populate({
+        path: "professionalId",
+        populate: [
+          { path: "userId", select: "firstName lastName email phone profileImage location" },
+        ],
+      })
+      .sort({ createdAt: -1 });
+
+    // Enrich with services
+    const enriched = await Promise.all(
+      bookmarks.map(async (b) => {
+        const bObj = b.toObject();
+        if (b.professionalId) {
+          bObj.professionalId.services = await Service.find({ professionalId: b.professionalId._id });
+        }
+        return bObj;
+      })
+    );
 
     return res.json({
       success: true,
-      data: bookmarks,
+      data: enriched,
     });
   } catch (error) {
     next(error);

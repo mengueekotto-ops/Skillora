@@ -2,10 +2,7 @@ const { Notification } = require("../models");
 
 const getUserNotifications = async (req, res, next) => {
   try {
-    const notifications = await Notification.findAll({
-      where: { userId: req.user.id },
-      order: [["createdAt", "DESC"]],
-    });
+    const notifications = await Notification.find({ userId: req.user._id }).sort({ createdAt: -1 });
 
     return res.json({
       success: true,
@@ -18,7 +15,7 @@ const getUserNotifications = async (req, res, next) => {
 
 const markAsRead = async (req, res, next) => {
   try {
-    const notification = await Notification.findByPk(req.params.id);
+    const notification = await Notification.findById(req.params.id);
     if (!notification) {
       return res.status(404).json({
         success: false,
@@ -26,7 +23,10 @@ const markAsRead = async (req, res, next) => {
       });
     }
 
-    if (notification.userId !== req.user.id && req.user.role !== "ADMIN") {
+    const isOwner = req.user._id.toString() === notification.userId.toString();
+    const isAdmin = req.user.role === "ADMIN";
+
+    if (!isOwner && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: "Forbidden.",

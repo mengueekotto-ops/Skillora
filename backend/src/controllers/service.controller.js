@@ -3,23 +3,23 @@ const { Service, Professional, User, Category } = require("../models");
 const getAllServices = async (req, res, next) => {
   try {
     const { categoryId, professionalId, search } = req.query;
-    const where = { status: "ACTIVE" };
+    const query = { status: "ACTIVE" };
 
-    if (categoryId) where.categoryId = categoryId;
-    if (professionalId) where.professionalId = professionalId;
+    if (categoryId) query.categoryId = categoryId;
+    if (professionalId) query.professionalId = professionalId;
 
-    const services = await Service.findAll({
-      where,
-      include: [
-        {
-          model: Professional,
-          as: "professional",
-          include: [{ model: User, as: "user", attributes: ["firstName", "lastName", "location", "profileImage"] }],
-        },
-        { model: Category, as: "category" },
-      ],
-      order: [["createdAt", "DESC"]],
-    });
+    if (search) {
+      const reg = new RegExp(search, "i");
+      query.$or = [{ title: reg }, { description: reg }, { location: reg }];
+    }
+
+    const services = await Service.find(query)
+      .populate({
+        path: "professionalId",
+        populate: { path: "userId", select: "firstName lastName location profileImage" },
+      })
+      .populate("categoryId")
+      .sort({ createdAt: -1 });
 
     return res.json({
       success: true,
@@ -32,16 +32,12 @@ const getAllServices = async (req, res, next) => {
 
 const getServiceById = async (req, res, next) => {
   try {
-    const service = await Service.findByPk(req.params.id, {
-      include: [
-        {
-          model: Professional,
-          as: "professional",
-          include: [{ model: User, as: "user", attributes: ["firstName", "lastName", "location", "profileImage"] }],
-        },
-        { model: Category, as: "category" },
-      ],
-    });
+    const service = await Service.findById(req.params.id)
+      .populate({
+        path: "professionalId",
+        populate: { path: "userId", select: "firstName lastName location profileImage" },
+      })
+      .populate("categoryId");
 
     if (!service) {
       return res.status(404).json({
@@ -61,9 +57,9 @@ const getServiceById = async (req, res, next) => {
 
 const createService = async (req, res, next) => {
   try {
-    const { categoryId, title, description, price, location } = req.body;
+    const { categoryId, title, description, price, location, image, gallery } = req.body;
 
-    const professional = await Professional.findOne({ where: { userId: req.user.id } });
+    const professional = await Professional.findOne({ userId: req.user._id });
     if (!professional) {
       return res.status(400).json({
         success: false,
@@ -79,12 +75,15 @@ const createService = async (req, res, next) => {
     }
 
     const service = await Service.create({
-      professionalId: professional.id,
-      categoryId,
-      title,
-      description,
-      price: Number(price),
-      location: location || req.user.location,
+      professionalId: professional._id,
+      categoryId: categoryId || null,
+      title: title.trim(),
+      description: description ? description.trim() : null,
+      price: Number(price) || 0,
+      location: location ? location.trim() : req.user.location,
+      image: image || null,
+      gallery: Array.isArray(gallery) ? gallery : [],
+      status: "ACTIVE",
     });
 
     return res.status(201).json({
@@ -99,9 +98,7 @@ const createService = async (req, res, next) => {
 
 const updateService = async (req, res, next) => {
   try {
-    const service = await Service.findByPk(req.params.id, {
-      include: [{ model: Professional, as: "professional" }],
-    });
+    const service = await Service.findById(req.params.id).populate("professionalId");
 
     if (!service) {
       return res.status(404).json({
@@ -110,21 +107,27 @@ const updateService = async (req, res, next) => {
       });
     }
 
-    if (service.professional.userId !== req.user.id && req.user.role !== "ADMIN") {
+    const ownerUserId = service.professionalId ? service.professionalId.userId.toString() : null;
+    const isOwner = ownerUserId && req.user._id.toString() === ownerUserId;
+    const isAdmin = req.user.role === "ADMIN";
+
+    if (!isOwner && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: "Forbidden. Cannot update another professional's service.",
       });
     }
 
-    const { categoryId, title, description, price, location, status } = req.body;
+    const { categoryId, title, description, price, location, status, image, gallery } = req.body;
 
     if (categoryId !== undefined) service.categoryId = categoryId;
-    if (title) service.title = title;
-    if (description !== undefined) service.description = description;
+    if (title) service.title = title.trim();
+    if (description !== undefined) service.description = description ? description.trim() : null;
     if (price !== undefined) service.price = Number(price);
-    if (location !== undefined) service.location = location;
+    if (location !== undefined) service.location = location ? location.trim() : null;
     if (status !== undefined) service.status = status;
+    if (image !== undefined) service.image = image;
+    if (gallery !== undefined) service.gallery = Array.isArray(gallery) ? gallery : service.gallery;
 
     await service.save();
 
@@ -140,9 +143,7 @@ const updateService = async (req, res, next) => {
 
 const deleteService = async (req, res, next) => {
   try {
-    const service = await Service.findByPk(req.params.id, {
-      include: [{ model: Professional, as: "professional" }],
-    });
+    const service = await Service.findById(req.params.id).populate("professionalId");
 
     if (!service) {
       return res.status(404).json({
@@ -151,14 +152,18 @@ const deleteService = async (req, res, next) => {
       });
     }
 
-    if (service.professional.userId !== req.user.id && req.user.role !== "ADMIN") {
+    const ownerUserId = service.professionalId ? service.professionalId.userId.toString() : null;
+    const isOwner = ownerUserId && req.user._id.toString() === ownerUserId;
+    const isAdmin = req.user.role === "ADMIN";
+
+    if (!isOwner && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: "Forbidden.",
       });
     }
 
-    await service.destroy();
+    await Service.findByIdAndDelete(service._id);
 
     return res.json({
       success: true,

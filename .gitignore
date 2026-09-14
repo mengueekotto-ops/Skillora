@@ -1,0 +1,17 @@
+# Dependencies (Crucial - prevents committing thousands of node files)
+node_modules/
+**/node_modules/
+
+# Environment variables & secrets (Crucial for security)
+.env
+.env.local
+*.env
+
+# Build outputs
+dist/
+build/
+
+# IDE & OS clutter
+.vscode/
+.DS_Store
+Thumbs.db

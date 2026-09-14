@@ -5,7 +5,7 @@ const { Professional } = require("../models");
  * NEW -> VERIFIED -> TRUSTED -> EXPERT
  */
 const updateVerificationProgression = async (professionalId) => {
-  const prof = await Professional.findByPk(professionalId);
+  const prof = await Professional.findById(professionalId);
   if (!prof) return null;
 
   let newStatus = prof.verificationStatus;

@@ -1,43 +1,49 @@
-const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/database");
+const mongoose = require("mongoose");
 
-const VerificationDocument = sequelize.define(
-  "VerificationDocument",
+const verificationDocumentSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
     verificationId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "verifications",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Verification",
+      required: true,
     },
     documentType: {
-      type: DataTypes.ENUM("ID_CARD", "PASSPORT", "CV", "CERTIFICATE", "PORTFOLIO", "BUSINESS_REGISTRATION", "VIDEO"),
-      allowNull: false,
+      type: String,
+      enum: [
+        "ID_CARD",
+        "PASSPORT",
+        "CV",
+        "CERTIFICATE",
+        "PORTFOLIO",
+        "BUSINESS_REGISTRATION",
+        "VIDEO",
+      ],
+      required: true,
     },
     fileUrl: {
-      type: DataTypes.STRING,
-      allowNull: false,
+      type: String,
+      required: true,
     },
     aiResult: {
-      type: DataTypes.JSON,
-      defaultValue: { consistencyScore: 90, flags: [] },
+      type: mongoose.Schema.Types.Mixed,
+      default: { consistencyScore: 90, flags: [] },
     },
     reviewStatus: {
-      type: DataTypes.ENUM("PENDING", "APPROVED", "FLAGGED_FOR_ADMIN", "REJECTED"),
-      defaultValue: "PENDING",
+      type: String,
+      enum: ["PENDING", "APPROVED", "FLAGGED_FOR_ADMIN", "REJECTED"],
+      default: "PENDING",
     },
   },
   {
-    tableName: "verification_documents",
     timestamps: true,
+    collection: "verification_documents",
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
-module.exports = VerificationDocument;
+verificationDocumentSchema.virtual("id").get(function () {
+  return this._id.toHexString();
+});
+
+module.exports = mongoose.model("VerificationDocument", verificationDocumentSchema);

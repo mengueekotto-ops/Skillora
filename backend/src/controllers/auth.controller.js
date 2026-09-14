@@ -26,50 +26,71 @@ const register = async (req, res, next) => {
       });
     }
 
-    const existingUser = await User.findOne({ where: { email: email.toLowerCase() } });
+    // Step 1: Normalize email (trim + lowercase)
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Step 2: Pre-check if email already exists in MongoDB
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
-      return res.status(400).json({
+      return res.status(409).json({
         success: false,
-        message: "An account with this email address already exists.",
+        message: "An account with this email already exists.",
       });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const formattedRole = (role || "CUSTOMER").toUpperCase() === "ARTISAN" || (role || "CUSTOMER").toUpperCase() === "PROFESSIONAL" ? "PROFESSIONAL" : (role || "CUSTOMER").toUpperCase() === "ADMIN" ? "ADMIN" : "CUSTOMER";
+    const normalizedRole = (role || "CUSTOMER").toUpperCase();
+    const formattedRole =
+      normalizedRole === "ARTISAN" || normalizedRole === "PROFESSIONAL"
+        ? "PROFESSIONAL"
+        : normalizedRole === "ADMIN"
+        ? "ADMIN"
+        : "CUSTOMER";
 
+    // Step 3: Create user in MongoDB
     const user = await User.create({
-      firstName,
-      lastName,
-      email: email.toLowerCase(),
-      phone,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: normalizedEmail,
+      phone: phone ? phone.trim() : null,
       password: hashedPassword,
       role: formattedRole,
-      location,
+      location: location ? location.trim() : null,
     });
 
     let professionalProfile = null;
     if (formattedRole === "PROFESSIONAL") {
-      const skillsArray = Array.isArray(skills) ? skills : typeof skills === "string" ? skills.split(",").map((s) => s.trim()) : [];
-      
-      const cvAnalysis = await analyzeCV({
-        profession: profession || "General Professional",
-        skills: skillsArray,
-        experience: Number(experience) || 0,
-      });
+      const skillsArray = Array.isArray(skills)
+        ? skills
+        : typeof skills === "string"
+        ? skills.split(",").map((s) => s.trim()).filter(Boolean)
+        : [];
+
+      let cvAnalysis = { verificationScore: 0 };
+      try {
+        cvAnalysis = await analyzeCV({
+          profession: profession || "General Professional",
+          skills: skillsArray,
+          experience: Number(experience) || 0,
+        });
+      } catch (aiErr) {
+        console.warn("AI CV analysis skipped or failed:", aiErr.message);
+      }
 
       professionalProfile = await Professional.create({
-        userId: user.id,
+        userId: user._id,
         profession: profession || "General Professional",
         bio: bio || "",
         experience: Number(experience) || 0,
         skills: skillsArray,
-        verificationStatus: "NEW",
-        verificationScore: cvAnalysis.verificationScore,
+        verificationStatus: "unverified",
+        verifiedBadge: false,
+        verificationScore: cvAnalysis.verificationScore || 0,
       });
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user._id.toString(), email: user.email, role: user.role },
       process.env.JWT_SECRET || "default_jwt_secret",
       { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
     );
@@ -80,7 +101,7 @@ const register = async (req, res, next) => {
       data: {
         token,
         user: {
-          id: user.id,
+          id: user._id.toString(),
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
@@ -92,6 +113,13 @@ const register = async (req, res, next) => {
       },
     });
   } catch (error) {
+    // Final protection: Catch MongoDB E11000 duplicate key error
+    if (error.code === 11000 || (error.name === "MongoServerError" && error.code === 11000)) {
+      return res.status(409).json({
+        success: false,
+        message: "An account with this email already exists.",
+      });
+    }
     next(error);
   }
 };
@@ -107,10 +135,8 @@ const login = async (req, res, next) => {
       });
     }
 
-    const user = await User.findOne({
-      where: { email: email.toLowerCase() },
-      include: [{ model: Professional, as: "professionalProfile" }],
-    });
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
       return res.status(401).json({
@@ -134,8 +160,13 @@ const login = async (req, res, next) => {
       });
     }
 
+    let professionalProfile = null;
+    if (user.role === "PROFESSIONAL") {
+      professionalProfile = await Professional.findOne({ userId: user._id });
+    }
+
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user._id.toString(), email: user.email, role: user.role },
       process.env.JWT_SECRET || "default_jwt_secret",
       { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
     );
@@ -146,7 +177,7 @@ const login = async (req, res, next) => {
       data: {
         token,
         user: {
-          id: user.id,
+          id: user._id.toString(),
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
@@ -154,7 +185,7 @@ const login = async (req, res, next) => {
           role: user.role,
           location: user.location,
           profileImage: user.profileImage,
-          professionalProfile: user.professionalProfile,
+          professionalProfile,
         },
       },
     });
@@ -170,14 +201,34 @@ const logout = async (req, res) => {
   });
 };
 
-const getMe = async (req, res) => {
-  return res.json({
-    success: true,
-    message: "User context retrieved.",
-    data: {
-      user: req.user,
-    },
-  });
+const getMe = async (req, res, next) => {
+  try {
+    let professionalProfile = null;
+    if (req.user && req.user.role === "PROFESSIONAL") {
+      professionalProfile = await Professional.findOne({ userId: req.user._id });
+    }
+
+    return res.json({
+      success: true,
+      message: "User context retrieved.",
+      data: {
+        user: {
+          id: req.user._id.toString(),
+          firstName: req.user.firstName,
+          lastName: req.user.lastName,
+          email: req.user.email,
+          phone: req.user.phone,
+          role: req.user.role,
+          location: req.user.location,
+          profileImage: req.user.profileImage,
+          isActive: req.user.isActive,
+          professionalProfile,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 module.exports = {

@@ -1,75 +1,76 @@
-const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/database");
+const mongoose = require("mongoose");
 
-const Review = sequelize.define(
-  "Review",
+const reviewSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
     customerId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "users",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
+
     professionalId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "professionals",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Professional",
+      required: true,
     },
+
     serviceRequestId: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: {
-        model: "service_requests",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ServiceRequest",
+      default: null,
     },
+
     rating: {
-      type: DataTypes.FLOAT,
-      allowNull: false,
-      validate: {
-        min: 1.0,
-        max: 5.0,
-      },
+      type: Number,
+      required: true,
+      min: 1,
+      max: 5,
     },
+
     comment: {
-      type: DataTypes.TEXT,
-      allowNull: true,
+      type: String,
+      default: null,
     },
+
     qualityRating: {
-      type: DataTypes.FLOAT,
-      defaultValue: 5.0,
+      type: Number,
+      default: 5,
+      min: 1,
+      max: 5,
     },
+
     professionalismRating: {
-      type: DataTypes.FLOAT,
-      defaultValue: 5.0,
+      type: Number,
+      default: 5,
+      min: 1,
+      max: 5,
     },
+
     communicationRating: {
-      type: DataTypes.FLOAT,
-      defaultValue: 5.0,
+      type: Number,
+      default: 5,
+      min: 1,
+      max: 5,
     },
+
     punctualityRating: {
-      type: DataTypes.FLOAT,
-      defaultValue: 5.0,
+      type: Number,
+      default: 5,
+      min: 1,
+      max: 5,
     },
+
     reliabilityRating: {
-      type: DataTypes.FLOAT,
-      defaultValue: 5.0,
+      type: Number,
+      default: 5,
+      min: 1,
+      max: 5,
     },
   },
   {
-    tableName: "reviews",
     timestamps: true,
+    collection: "reviews",
   }
 );
 
-module.exports = Review;
+module.exports = mongoose.model("Review", reviewSchema);

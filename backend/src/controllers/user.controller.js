@@ -2,15 +2,21 @@ const { User, Professional } = require("../models");
 
 const getAllUsers = async (req, res, next) => {
   try {
-    const users = await User.findAll({
-      attributes: { exclude: ["password"] },
-      include: [{ model: Professional, as: "professionalProfile" }],
-      order: [["createdAt", "DESC"]],
-    });
+    const users = await User.find().select("-password").sort({ createdAt: -1 });
+
+    const enriched = await Promise.all(
+      users.map(async (u) => {
+        const uObj = u.toObject();
+        if (u.role === "PROFESSIONAL") {
+          uObj.professionalProfile = await Professional.findOne({ userId: u._id });
+        }
+        return uObj;
+      })
+    );
 
     return res.json({
       success: true,
-      data: users,
+      data: enriched,
     });
   } catch (error) {
     next(error);
@@ -19,10 +25,7 @@ const getAllUsers = async (req, res, next) => {
 
 const getUserById = async (req, res, next) => {
   try {
-    const user = await User.findByPk(req.params.id, {
-      attributes: { exclude: ["password"] },
-      include: [{ model: Professional, as: "professionalProfile" }],
-    });
+    const user = await User.findById(req.params.id).select("-password");
 
     if (!user) {
       return res.status(404).json({
@@ -31,9 +34,14 @@ const getUserById = async (req, res, next) => {
       });
     }
 
+    const uObj = user.toObject();
+    if (user.role === "PROFESSIONAL") {
+      uObj.professionalProfile = await Professional.findOne({ userId: user._id });
+    }
+
     return res.json({
       success: true,
-      data: user,
+      data: uObj,
     });
   } catch (error) {
     next(error);
@@ -43,7 +51,7 @@ const getUserById = async (req, res, next) => {
 const updateUser = async (req, res, next) => {
   try {
     const { firstName, lastName, phone, location, profileImage, isActive } = req.body;
-    const user = await User.findByPk(req.params.id);
+    const user = await User.findById(req.params.id);
 
     if (!user) {
       return res.status(404).json({
@@ -53,26 +61,32 @@ const updateUser = async (req, res, next) => {
     }
 
     // Only user themselves or admin can update
-    if (req.user.id !== user.id && req.user.role !== "ADMIN") {
+    const isOwner = req.user._id.toString() === user._id.toString();
+    const isAdmin = req.user.role === "ADMIN";
+
+    if (!isOwner && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: "Forbidden. Cannot update another user profile.",
       });
     }
 
-    if (firstName) user.firstName = firstName;
-    if (lastName) user.lastName = lastName;
-    if (phone !== undefined) user.phone = phone;
-    if (location !== undefined) user.location = location;
+    if (firstName) user.firstName = firstName.trim();
+    if (lastName) user.lastName = lastName.trim();
+    if (phone !== undefined) user.phone = phone ? phone.trim() : null;
+    if (location !== undefined) user.location = location ? location.trim() : null;
     if (profileImage !== undefined) user.profileImage = profileImage;
-    if (isActive !== undefined && req.user.role === "ADMIN") user.isActive = isActive;
+    if (isActive !== undefined && isAdmin) user.isActive = isActive;
 
     await user.save();
+
+    const uObj = user.toObject();
+    delete uObj.password;
 
     return res.json({
       success: true,
       message: "User profile updated.",
-      data: user,
+      data: uObj,
     });
   } catch (error) {
     next(error);
@@ -81,7 +95,7 @@ const updateUser = async (req, res, next) => {
 
 const deleteUser = async (req, res, next) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    const user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -89,18 +103,25 @@ const deleteUser = async (req, res, next) => {
       });
     }
 
-    if (req.user.id !== user.id && req.user.role !== "ADMIN") {
+    const isOwner = req.user._id.toString() === user._id.toString();
+    const isAdmin = req.user.role === "ADMIN";
+
+    if (!isOwner && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: "Forbidden. Cannot delete another user account.",
       });
     }
 
-    await user.destroy();
+    if (user.role === "PROFESSIONAL") {
+      await Professional.deleteMany({ userId: user._id });
+    }
+
+    await User.findByIdAndDelete(user._id);
 
     return res.json({
       success: true,
-      message: "User account deleted.",
+      message: "User deleted successfully.",
     });
   } catch (error) {
     next(error);

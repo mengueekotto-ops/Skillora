@@ -3,7 +3,10 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 
-const { sequelize, connectDB } = require("./config/database");
+const path = require("path");
+
+const { connectDB } = require("./config/database");
+const { User } = require("./models");
 
 const authRoutes = require("./routes/auth.route");
 const userRoutes = require("./routes/user.route");
@@ -17,6 +20,7 @@ const adminRoutes = require("./routes/admin.route");
 const aiRoutes = require("./routes/ai.route");
 const verificationRoutes = require("./routes/verification.route");
 const bookmarkRoutes = require("./routes/bookmark.route");
+const uploadRoutes = require("./routes/upload.route");
 
 const errorHandler = require("./middleware/error.middleware");
 
@@ -51,6 +55,9 @@ app.get("/", (req, res) => {
   });
 });
 
+// Serve Uploads directory statically
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+
 // Mount Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -64,6 +71,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/verifications", verificationRoutes);
 app.use("/api/bookmarks", bookmarkRoutes);
+app.use("/api/upload", uploadRoutes);
 
 // Error Middleware
 app.use(errorHandler);
@@ -74,11 +82,10 @@ const startServer = async () => {
   try {
     await connectDB();
 
-    await sequelize.sync({
-      alter: true,
-    });
+    // Ensure unique indexes on User model
+    await User.init();
 
-    console.log("✅ Database synchronized with Skillora AI Verification models.");
+    console.log("✅ MongoDB connected and User indexes synchronized.");
 
     app.listen(PORT, () => {
       console.log(`🚀 Skillora Backend Server running on http://localhost:${PORT}`);

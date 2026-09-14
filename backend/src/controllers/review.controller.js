@@ -2,18 +2,19 @@ const { Review, Professional, User, ServiceRequest } = require("../models");
 const { updateVerificationProgression } = require("../services/verification.service");
 
 const recalculateProfessionalRating = async (professionalId) => {
-  const reviews = await Review.findAll({ where: { professionalId } });
-  if (reviews.length === 0) return;
+  const reviews = await Review.find({ professionalId });
+  const prof = await Professional.findById(professionalId);
+  if (!prof) return;
 
-  const total = reviews.reduce((sum, r) => sum + r.rating, 0);
-  const avgRating = Number((total / reviews.length).toFixed(1));
-
-  const prof = await Professional.findByPk(professionalId);
-  if (prof) {
-    prof.rating = avgRating;
-    await prof.save();
-    await updateVerificationProgression(prof.id);
+  if (reviews.length === 0) {
+    prof.rating = 0;
+  } else {
+    const total = reviews.reduce((sum, r) => sum + r.rating, 0);
+    prof.rating = Number((total / reviews.length).toFixed(1));
   }
+
+  await prof.save();
+  await updateVerificationProgression(prof._id);
 };
 
 const createReview = async (req, res, next) => {
@@ -38,9 +39,9 @@ const createReview = async (req, res, next) => {
     }
 
     const review = await Review.create({
-      customerId: req.user.id,
+      customerId: req.user._id,
       professionalId,
-      serviceRequestId,
+      serviceRequestId: serviceRequestId || null,
       rating: Number(rating),
       comment,
       qualityRating: Number(qualityRating),
@@ -65,19 +66,18 @@ const createReview = async (req, res, next) => {
 const getAllReviews = async (req, res, next) => {
   try {
     const { professionalId, customerId } = req.query;
-    const where = {};
+    const query = {};
 
-    if (professionalId) where.professionalId = professionalId;
-    if (customerId) where.customerId = customerId;
+    if (professionalId) query.professionalId = professionalId;
+    if (customerId) query.customerId = customerId;
 
-    const reviews = await Review.findAll({
-      where,
-      include: [
-        { model: User, as: "customer", attributes: ["firstName", "lastName", "profileImage"] },
-        { model: Professional, as: "professional" },
-      ],
-      order: [["createdAt", "DESC"]],
-    });
+    const reviews = await Review.find(query)
+      .populate("customerId", "firstName lastName profileImage")
+      .populate({
+        path: "professionalId",
+        populate: { path: "userId", select: "firstName lastName" },
+      })
+      .sort({ createdAt: -1 });
 
     return res.json({
       success: true,
@@ -90,12 +90,9 @@ const getAllReviews = async (req, res, next) => {
 
 const getReviewById = async (req, res, next) => {
   try {
-    const review = await Review.findByPk(req.params.id, {
-      include: [
-        { model: User, as: "customer", attributes: ["firstName", "lastName", "profileImage"] },
-        { model: Professional, as: "professional" },
-      ],
-    });
+    const review = await Review.findById(req.params.id)
+      .populate("customerId", "firstName lastName profileImage")
+      .populate("professionalId");
 
     if (!review) {
       return res.status(404).json({
@@ -115,7 +112,7 @@ const getReviewById = async (req, res, next) => {
 
 const updateReview = async (req, res, next) => {
   try {
-    const review = await Review.findByPk(req.params.id);
+    const review = await Review.findById(req.params.id);
     if (!review) {
       return res.status(404).json({
         success: false,
@@ -123,14 +120,25 @@ const updateReview = async (req, res, next) => {
       });
     }
 
-    if (review.customerId !== req.user.id && req.user.role !== "ADMIN") {
+    const isOwner = req.user._id.toString() === review.customerId.toString();
+    const isAdmin = req.user.role === "ADMIN";
+
+    if (!isOwner && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: "Forbidden.",
       });
     }
 
-    const { rating, comment, qualityRating, professionalismRating, communicationRating, punctualityRating, reliabilityRating } = req.body;
+    const {
+      rating,
+      comment,
+      qualityRating,
+      professionalismRating,
+      communicationRating,
+      punctualityRating,
+      reliabilityRating,
+    } = req.body;
 
     if (rating !== undefined) review.rating = Number(rating);
     if (comment !== undefined) review.comment = comment;
@@ -155,7 +163,7 @@ const updateReview = async (req, res, next) => {
 
 const deleteReview = async (req, res, next) => {
   try {
-    const review = await Review.findByPk(req.params.id);
+    const review = await Review.findById(req.params.id);
     if (!review) {
       return res.status(404).json({
         success: false,
@@ -164,7 +172,7 @@ const deleteReview = async (req, res, next) => {
     }
 
     const profId = review.professionalId;
-    await review.destroy();
+    await Review.findByIdAndDelete(review._id);
     await recalculateProfessionalRating(profId);
 
     return res.json({

@@ -1,68 +1,64 @@
-const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/database");
+const mongoose = require("mongoose");
 
-const Verification = sequelize.define(
-  "Verification",
+const verificationSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
     artisanId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "professionals",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Professional",
+      required: true,
     },
     status: {
-      type: DataTypes.ENUM("unverified", "pending", "verified", "failed"),
-      defaultValue: "pending",
+      type: String,
+      enum: ["unverified", "pending", "verified", "failed"],
+      default: "pending",
     },
     score: {
-      type: DataTypes.FLOAT,
-      defaultValue: 0.0,
+      type: Number,
+      default: 0.0,
     },
     startedAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
+      type: Date,
+      default: Date.now,
     },
     completedAt: {
-      type: DataTypes.DATE,
-      allowNull: true,
+      type: Date,
+      default: null,
     },
     reviewedBy: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      defaultValue: "Skillora AI Verification Engine",
+      type: String,
+      default: "Skillora AI Verification Engine",
     },
     adminDecision: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: String,
+      default: null,
     },
     profileCompletenessScore: {
-      type: DataTypes.FLOAT,
-      defaultValue: 0.0,
+      type: Number,
+      default: 0.0,
     },
     technicalAssessmentScore: {
-      type: DataTypes.FLOAT,
-      defaultValue: 0.0,
+      type: Number,
+      default: 0.0,
     },
     documentConsistencyScore: {
-      type: DataTypes.FLOAT,
-      defaultValue: 0.0,
+      type: Number,
+      default: 0.0,
     },
     videoVerified: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
+      type: Boolean,
+      default: false,
     },
   },
   {
-    tableName: "verifications",
     timestamps: true,
+    collection: "verifications",
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
-module.exports = Verification;
+verificationSchema.virtual("id").get(function () {
+  return this._id.toHexString();
+});
+
+module.exports = mongoose.model("Verification", verificationSchema);

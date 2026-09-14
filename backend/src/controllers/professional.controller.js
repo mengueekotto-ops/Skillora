@@ -4,41 +4,43 @@ const { updateVerificationProgression } = require("../services/verification.serv
 
 const getAllProfessionals = async (req, res, next) => {
   try {
-    const { profession, status, location } = req.query;
-    const where = {};
+    const { profession, status, location, search } = req.query;
+    const query = {};
 
-    if (profession) where.profession = profession;
-    if (status) where.verificationStatus = status;
+    if (profession) query.profession = new RegExp(profession, "i");
+    if (status) query.verificationStatus = status;
 
-    const userWhere = {};
-    if (location) userWhere.location = location;
+    if (search) {
+      const reg = new RegExp(search, "i");
+      query.$or = [{ profession: reg }, { bio: reg }, { groupName: reg }];
+    }
 
-    const professionals = await Professional.findAll({
-      where,
-      include: [
-        {
-          model: User,
-          as: "user",
-          attributes: ["id", "firstName", "lastName", "email", "phone", "profileImage", "location"],
-          where: Object.keys(userWhere).length > 0 ? userWhere : undefined,
-        },
-        {
-          model: Service,
-          as: "services",
-          include: [{ model: Category, as: "category" }],
-        },
-        {
-          model: Review,
-          as: "reviews",
-          include: [{ model: User, as: "customer", attributes: ["firstName", "lastName"] }],
-        },
-      ],
-      order: [["rating", "DESC"]],
-    });
+    let professionals = await Professional.find(query)
+      .populate("userId", "id firstName lastName email phone profileImage location isActive")
+      .sort({ rating: -1, createdAt: -1 });
+
+    if (location) {
+      const locReg = new RegExp(location, "i");
+      professionals = professionals.filter(
+        (p) => p.userId && p.userId.location && locReg.test(p.userId.location)
+      );
+    }
+
+    // Attach services and reviews
+    const enriched = await Promise.all(
+      professionals.map(async (p) => {
+        const pObj = p.toObject();
+        pObj.services = await Service.find({ professionalId: p._id }).populate("categoryId");
+        pObj.reviews = await Review.find({ professionalId: p._id })
+          .populate("customerId", "firstName lastName profileImage")
+          .limit(5);
+        return pObj;
+      })
+    );
 
     return res.json({
       success: true,
-      data: professionals,
+      data: enriched,
     });
   } catch (error) {
     next(error);
@@ -47,25 +49,10 @@ const getAllProfessionals = async (req, res, next) => {
 
 const getProfessionalById = async (req, res, next) => {
   try {
-    const professional = await Professional.findByPk(req.params.id, {
-      include: [
-        {
-          model: User,
-          as: "user",
-          attributes: ["id", "firstName", "lastName", "email", "phone", "profileImage", "location"],
-        },
-        {
-          model: Service,
-          as: "services",
-          include: [{ model: Category, as: "category" }],
-        },
-        {
-          model: Review,
-          as: "reviews",
-          include: [{ model: User, as: "customer", attributes: ["firstName", "lastName", "profileImage"] }],
-        },
-      ],
-    });
+    const professional = await Professional.findById(req.params.id).populate(
+      "userId",
+      "id firstName lastName email phone profileImage location isActive"
+    );
 
     if (!professional) {
       return res.status(404).json({
@@ -74,9 +61,16 @@ const getProfessionalById = async (req, res, next) => {
       });
     }
 
+    const pObj = professional.toObject();
+    pObj.services = await Service.find({ professionalId: professional._id }).populate("categoryId");
+    pObj.reviews = await Review.find({ professionalId: professional._id }).populate(
+      "customerId",
+      "firstName lastName profileImage"
+    );
+
     return res.json({
       success: true,
-      data: professional,
+      data: pObj,
     });
   } catch (error) {
     next(error);
@@ -85,9 +79,25 @@ const getProfessionalById = async (req, res, next) => {
 
 const createProfessional = async (req, res, next) => {
   try {
-    const { profession, bio, experience, skills, education, certifications, cvUrl, videoUrl } = req.body;
+    const {
+      profession,
+      bio,
+      experience,
+      skills,
+      education,
+      certifications,
+      cvUrl,
+      videoUrl,
+      coverPhoto,
+      portfolio,
+      artisanType,
+      groupName,
+      groupSize,
+      groupRegNum,
+      leadName,
+    } = req.body;
 
-    const existing = await Professional.findOne({ where: { userId: req.user.id } });
+    const existing = await Professional.findOne({ userId: req.user._id });
     if (existing) {
       return res.status(400).json({
         success: false,
@@ -95,18 +105,33 @@ const createProfessional = async (req, res, next) => {
       });
     }
 
-    const skillsArray = Array.isArray(skills) ? skills : typeof skills === "string" ? skills.split(",").map((s) => s.trim()) : [];
+    const skillsArray = Array.isArray(skills)
+      ? skills
+      : typeof skills === "string"
+      ? skills.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
     const certsArray = Array.isArray(certifications) ? certifications : [];
+    const portfolioArray = Array.isArray(portfolio) ? portfolio : [];
 
-    const cvAnalysis = await analyzeCV({
-      profession,
-      skills: skillsArray,
-      experience: Number(experience) || 0,
-      education,
-    });
+    let cvAnalysis = { verificationScore: 0 };
+    try {
+      cvAnalysis = await analyzeCV({
+        profession,
+        skills: skillsArray,
+        experience: Number(experience) || 0,
+        education,
+      });
+    } catch (e) {
+      console.warn("CV analysis skipped:", e.message);
+    }
 
     const professional = await Professional.create({
-      userId: req.user.id,
+      userId: req.user._id,
+      artisanType: artisanType || "SINGLE",
+      groupName: groupName || null,
+      groupSize: Number(groupSize) || 1,
+      groupRegNum: groupRegNum || null,
+      leadName: leadName || null,
       profession: profession || "General Specialist",
       bio,
       experience: Number(experience) || 0,
@@ -115,11 +140,13 @@ const createProfessional = async (req, res, next) => {
       certifications: certsArray,
       cvUrl,
       videoUrl,
-      verificationStatus: "NEW",
-      verificationScore: cvAnalysis.verificationScore,
+      coverPhoto,
+      portfolio: portfolioArray,
+      verificationStatus: "unverified",
+      verifiedBadge: false,
+      verificationScore: cvAnalysis.verificationScore || 0,
     });
 
-    // Update user role to PROFESSIONAL if needed
     if (req.user.role !== "PROFESSIONAL" && req.user.role !== "ADMIN") {
       req.user.role = "PROFESSIONAL";
       await req.user.save();
@@ -137,7 +164,7 @@ const createProfessional = async (req, res, next) => {
 
 const updateProfessional = async (req, res, next) => {
   try {
-    const professional = await Professional.findByPk(req.params.id);
+    const professional = await Professional.findById(req.params.id);
     if (!professional) {
       return res.status(404).json({
         success: false,
@@ -145,37 +172,68 @@ const updateProfessional = async (req, res, next) => {
       });
     }
 
-    if (req.user.id !== professional.userId && req.user.role !== "ADMIN") {
+    const isOwner = req.user._id.toString() === professional.userId.toString();
+    const isAdmin = req.user.role === "ADMIN";
+
+    if (!isOwner && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: "Forbidden. Cannot update another professional's profile.",
       });
     }
 
-    const { profession, bio, experience, skills, education, certifications, cvUrl, videoUrl, availability } = req.body;
+    const {
+      profession,
+      bio,
+      experience,
+      skills,
+      education,
+      certifications,
+      cvUrl,
+      videoUrl,
+      availability,
+      coverPhoto,
+      portfolio,
+      artisanType,
+      groupName,
+    } = req.body;
 
     if (profession) professional.profession = profession;
     if (bio !== undefined) professional.bio = bio;
     if (experience !== undefined) professional.experience = Number(experience);
-    if (skills) professional.skills = Array.isArray(skills) ? skills : typeof skills === "string" ? skills.split(",").map((s) => s.trim()) : professional.skills;
+    if (skills) {
+      professional.skills = Array.isArray(skills)
+        ? skills
+        : typeof skills === "string"
+        ? skills.split(",").map((s) => s.trim()).filter(Boolean)
+        : professional.skills;
+    }
     if (education !== undefined) professional.education = education;
     if (certifications) professional.certifications = certifications;
     if (cvUrl !== undefined) professional.cvUrl = cvUrl;
     if (videoUrl !== undefined) professional.videoUrl = videoUrl;
+    if (coverPhoto !== undefined) professional.coverPhoto = coverPhoto;
+    if (portfolio !== undefined) professional.portfolio = Array.isArray(portfolio) ? portfolio : professional.portfolio;
     if (availability !== undefined) professional.availability = availability;
+    if (artisanType) professional.artisanType = artisanType;
+    if (groupName !== undefined) professional.groupName = groupName;
 
-    // Recalculate AI score
-    const cvAnalysis = await analyzeCV({
-      profession: professional.profession,
-      skills: professional.skills,
-      experience: professional.experience,
-      education: professional.education,
-    });
+    try {
+      const cvAnalysis = await analyzeCV({
+        profession: professional.profession,
+        skills: professional.skills,
+        experience: professional.experience,
+        education: professional.education,
+      });
+      if (cvAnalysis.verificationScore) {
+        professional.verificationScore = cvAnalysis.verificationScore;
+      }
+    } catch (e) {
+      // ignore
+    }
 
-    professional.verificationScore = cvAnalysis.verificationScore;
     await professional.save();
-
-    await updateVerificationProgression(professional.id);
+    await updateVerificationProgression(professional._id);
 
     return res.json({
       success: true,
@@ -189,7 +247,7 @@ const updateProfessional = async (req, res, next) => {
 
 const deleteProfessional = async (req, res, next) => {
   try {
-    const professional = await Professional.findByPk(req.params.id);
+    const professional = await Professional.findById(req.params.id);
     if (!professional) {
       return res.status(404).json({
         success: false,
@@ -197,14 +255,18 @@ const deleteProfessional = async (req, res, next) => {
       });
     }
 
-    if (req.user.id !== professional.userId && req.user.role !== "ADMIN") {
+    const isOwner = req.user._id.toString() === professional.userId.toString();
+    const isAdmin = req.user.role === "ADMIN";
+
+    if (!isOwner && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: "Forbidden.",
       });
     }
 
-    await professional.destroy();
+    await Service.deleteMany({ professionalId: professional._id });
+    await Professional.findByIdAndDelete(professional._id);
 
     return res.json({
       success: true,

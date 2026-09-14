@@ -7,7 +7,8 @@ export default function ClientDashboard({
   onOpenSettings,
   triggerToast,
   t,
-  lang
+  lang,
+  onSelectArtisan
 }) {
   const isFrench = lang === 'fr';
 
@@ -25,26 +26,54 @@ export default function ClientDashboard({
     {
       id: 1,
       name: 'Emmanuel Ngu',
+      businessName: 'Ngu Solar & Power Systems',
       profession: 'Électricien Master & Solaire',
       city: 'Douala & Yaoundé',
+      location: 'Akwa, Douala • Bastos, Yaoundé',
       rating: 4.9,
       reviews: 38,
       verified: true,
       priceRate: '15 000 FCFA',
+      phone: '+237 675 42 10 99',
       whatsapp: '237675421099',
-      image: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80'
+      image: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80',
+      coverPhoto: 'https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=1600&q=85',
+      experience: '08 ans',
+      badge: 'PRO MASTER',
+      type: 'Single Artisan (Master Specialist)',
+      skills: ['Tableaux Électriques', 'Centrales Solaires', 'Raccordement Groupes', 'Dépannage Court-circuit', 'Éclairage LED Industriel'],
+      bio: 'Électricien diplômé avec 8 ans d\'expérience dans le résidentiel et l\'énergie solaire au Cameroun.',
+      gallery: [
+        { id: 101, title: 'Centrale Solaire Résidentielle 5kVA', img: 'https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=800&q=80' },
+        { id: 102, title: 'Câblage Armoire Électrique Triphasée', img: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80' },
+        { id: 103, title: 'Installation Onduleur Hybride', img: 'https://images.unsplash.com/photo-1544725176-7c40e5a71c5e?auto=format&fit=crop&w=800&q=80' }
+      ]
     },
     {
       id: 2,
-      name: 'Derreck Plomb',
+      name: 'Atelier Central Tuyauterie & Bâtiment',
+      businessName: 'Atelier Central Tuyauterie SARL',
       profession: 'Plomberie Sanitaire & Urgence',
       city: 'Yaoundé (Bastos)',
+      location: 'Bastos & Biyem-Assi, Yaoundé',
       rating: 5.0,
-      reviews: 24,
+      reviews: 94,
       verified: true,
-      priceRate: '15 000 FCFA',
+      priceRate: '25 000 FCFA',
+      phone: '+237 699 88 77 66',
       whatsapp: '237699887766',
-      image: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=600&q=80'
+      image: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=600&q=80',
+      coverPhoto: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=1600&q=85',
+      experience: '12 ans',
+      badge: 'ENTERPRISE CERTIFIED',
+      type: 'Grouped Artisan (Workshop)',
+      skills: ['Tuyauterie Cuivre & Inox', 'Chauffe-eau Solaire', 'Dépannage Fuite 24/7', 'Assainissement & Fosses', 'Pompage & Forage'],
+      bio: 'Atelier collectif d\'artisans plombiers et thermiciens certifiés pour grands chantiers et résidences.',
+      gallery: [
+        { id: 201, title: 'Rénovation Salle de Bain de Luxe', img: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80' },
+        { id: 202, title: 'Centrale de Chauffage Villa Bastos', img: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=800&q=80' },
+        { id: 203, title: 'Système de Pompage et Filtration', img: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=800&q=80' }
+      ]
     }
   ]);
 
@@ -66,7 +95,7 @@ export default function ClientDashboard({
     {
       id: 'SK-8812',
       title: '🔧 Réparation Fuite d\'Eau & Mitigeur Cuisine',
-      artisan: 'Derreck Plomb',
+      artisan: 'Atelier Central Tuyauterie & Bâtiment',
       profession: 'Plombier Sanitaire',
       date: 'Demain, 10:30',
       location: 'Yaoundé (Biyem-Assi)',
@@ -95,63 +124,110 @@ export default function ClientDashboard({
     }
   ]);
 
-  // Sample Artisans List
+  // Sample Artisans List with Rich Profile Data for Read-Only Navigation
   const artisans = [
     {
       id: 1,
       name: 'Emmanuel Ngu',
-      type: 'Single Artisan',
+      businessName: 'Ngu Solar & High-Voltage Systems',
+      type: 'Single Artisan (Master Specialist)',
       profession: 'Master Electrician & Solar',
       city: 'Douala (Akwa)',
+      location: 'Akwa & Bonanjo, Douala',
       rating: 4.9,
       reviews: 38,
       verified: true,
       priceRate: '15 000 FCFA / visite',
+      phone: '+237 675 42 10 99',
       whatsapp: '237675421099',
       image: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80',
-      badge: 'PRO MASTER',
+      coverPhoto: 'https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=1600&q=85',
+      badge: 'PRO MASTER VÉRIFIÉ',
+      experience: '08 ans',
+      skills: ['Tableaux Divisionnaires', 'Centrales Photovoltaïques', 'Groupes Électrogènes', 'Mise à la Terre & Parasurtenseur', 'Éclairage Architectural'],
+      bio: 'Master électricien certifié avec 8 ans d\'expérience dans l\'ingénierie électrique haute et basse tension et les installations solaires clés en main à Douala et Yaoundé.',
+      gallery: [
+        { id: 101, title: 'Centrale Solaire Résidentielle 5kVA', img: 'https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=800&q=80' },
+        { id: 102, title: 'Câblage Armoire Électrique Triphasée', img: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80' },
+        { id: 103, title: 'Installation Onduleur Hybride & Batteries', img: 'https://images.unsplash.com/photo-1544725176-7c40e5a71c5e?auto=format&fit=crop&w=800&q=80' }
+      ]
     },
     {
       id: 2,
       name: 'Atelier Central Tuyauterie & Bâtiment',
+      businessName: 'Atelier Central BTP & Fluides Cameroun',
       type: 'Grouped Artisan (Workshop)',
       profession: 'Sanitary Plumbing & Industrial Heating',
       city: 'Yaoundé (Bastos & Biyem-Assi)',
+      location: 'Bastos, Yaoundé',
       rating: 5.0,
       reviews: 94,
       verified: true,
       priceRate: '25 000 FCFA / intervention',
+      phone: '+237 699 88 77 66',
       whatsapp: '237699887766',
       image: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=600&q=80',
+      coverPhoto: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=1600&q=85',
       badge: 'ENTERPRISE CERTIFIED',
+      experience: '12 ans',
+      skills: ['Tuyauterie Cuivre & Inox', 'Chauffe-eau Solaire', 'Dépannage Fuite 24/7', 'Assainissement & Fosses', 'Pompage & Forage'],
+      bio: 'Groupement d\'artisans chevronnés en plomberie sanitaire, canalisations souterraines et distribution d\'eau pour villas, immeubles et commerces.',
+      gallery: [
+        { id: 201, title: 'Rénovation Salle de Bain de Luxe', img: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80' },
+        { id: 202, title: 'Centrale de Chauffage Villa Bastos', img: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=800&q=80' },
+        { id: 203, title: 'Installation Tuyauterie Inox Industrielle', img: 'https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&w=800&q=80' },
+        { id: 204, title: 'Système de Pompage et Filtration', img: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=800&q=80' }
+      ]
     },
     {
       id: 3,
       name: 'Kamga & Fils Menuiserie Moderne',
+      businessName: 'Ébénisterie Kamga & Mobilier Haut de Gamme',
       type: 'Grouped Artisan (Workshop)',
       profession: 'Custom Kitchens & Luxury Woodwork',
       city: 'Douala (Bonapriso)',
+      location: 'Bonapriso & Akwa, Douala',
       rating: 4.8,
       reviews: 52,
       verified: true,
       priceRate: '45 000 FCFA / devis',
+      phone: '+237 670 12 34 56',
       whatsapp: '237670123456',
       image: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=600&q=80',
+      coverPhoto: 'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=1600&q=85',
       badge: 'TOP COLLECTIVE',
+      experience: '15 ans',
+      skills: ['Cuisines Américaines Sur Mesure', 'Dressings & Placards', 'Portes Blindées en Bois Massif', 'Parquet Massif', 'Traitement Anti-termites'],
+      bio: 'Atelier familial de menuiserie fine et d\'agencement d\'intérieur en bois précieux locaux (Ayous, Iroko, Padouk).',
+      gallery: [
+        { id: 301, title: 'Cuisine Moderne en Bois Massif Iroko', img: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=800&q=80' },
+        { id: 302, title: 'Placard Dressing Intégré sur Mesure', img: 'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=800&q=80' }
+      ]
     },
     {
       id: 4,
       name: 'Alain Foe',
-      type: 'Single Artisan',
+      businessName: 'Foe Frigo & Froid Cameroun',
+      type: 'Single Artisan (Master Specialist)',
       profession: 'AC & Cold Room Refrigeration',
       city: 'Yaoundé (Mvan)',
+      location: 'Mvan & Omnisports, Yaoundé',
       rating: 4.7,
       reviews: 14,
       verified: false,
       priceRate: '20 000 FCFA / diagnostic',
+      phone: '+237 677 11 22 33',
       whatsapp: '237677112233',
       image: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=600&q=80',
-      badge: 'NEW PRO',
+      coverPhoto: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=1600&q=85',
+      badge: 'NOUVEAU PRO',
+      experience: '06 ans',
+      skills: ['Climatiseurs Split & Inverter', 'Recharge Fréon R410a / R32', 'Chambres Froides Positives/Négatives', 'Nettoyage Échangeurs & Filtres'],
+      bio: 'Technicien frigoriste qualifié pour le dépannage rapide, l\'entretien préventif et la recharge gaz de climatiseurs résidentiels et chambres froides.',
+      gallery: [
+        { id: 401, title: 'Installation Mini-Split Inverter 2CV', img: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=800&q=80' },
+        { id: 402, title: 'Maintenance Groupe Compresseur Froid', img: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=800&q=80' }
+      ]
     }
   ];
 
@@ -219,13 +295,14 @@ export default function ClientDashboard({
           ========================================================================== */}
       <div className="client-profile-header-card">
         <div className="client-profile-main-info">
-          <div className="client-avatar-large-wrap">
+          <div className="client-avatar-large-wrap" onClick={onOpenSettings} style={{ cursor: 'pointer' }} title={isFrench ? "Changer la photo de profil" : "Change profile picture"}>
             <img
-              src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80"
+              src={currentUser?.profileImage || currentUser?.avatar || "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80"}
               alt="Client Avatar"
               className="client-avatar-img"
             />
             <span className="client-verified-badge" title="Client Biométriquement Vérifié">✓</span>
+            <span className="avatar-edit-overlay-btn">📷</span>
           </div>
 
           <div className="client-profile-details">
@@ -358,13 +435,21 @@ export default function ClientDashboard({
                 return true;
               })
               .map((artisan) => (
-                <div key={artisan.id} className="artisan-card-luxury">
+                <div
+                  key={artisan.id}
+                  className="artisan-card-luxury clickable-profile-card"
+                  onClick={() => onSelectArtisan && onSelectArtisan(artisan)}
+                  title={isFrench ? `Consulter le profil de ${artisan.name}` : `View ${artisan.name}'s profile`}
+                >
                   <div className="artisan-card-img-wrap">
                     <img src={artisan.image} alt={artisan.name} />
                     <span className="artisan-badge-tag">{artisan.badge}</span>
                     <span className="artisan-structure-tag">
                       {artisan.type.includes('Grouped') ? '🏢 Atelier Groupé' : '🧑‍🔧 Solo Pro'}
                     </span>
+                    <div className="card-hover-profile-hint">
+                      <span>👁️ {isFrench ? 'Voir Profil' : 'View Profile'}</span>
+                    </div>
                   </div>
 
                   <div className="artisan-card-body">
@@ -384,12 +469,34 @@ export default function ClientDashboard({
                     <p className="artisan-price-tag">Tarif: <strong>{artisan.priceRate}</strong></p>
 
                     <div className="artisan-card-actions">
-                      <button className="btn-whatsapp-card" onClick={() => openWhatsApp(artisan.whatsapp)}>
+                      <button
+                        type="button"
+                        className="btn-view-profile-card"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onSelectArtisan) onSelectArtisan(artisan);
+                        }}
+                      >
+                        👁️ {isFrench ? 'Consulter le Profil' : 'View Profile'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-whatsapp-card"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openWhatsApp(artisan.whatsapp);
+                        }}
+                      >
                         💬 WhatsApp
                       </button>
-                      <button className="btn-book-card" onClick={() => {
-                        triggerToast(isFrench ? `Réservation envoyée à ${artisan.name} !` : `Booking request sent to ${artisan.name}!`, '⭐');
-                      }}>
+                      <button
+                        type="button"
+                        className="btn-book-card"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          triggerToast(isFrench ? `Réservation envoyée à ${artisan.name} !` : `Booking request sent to ${artisan.name}!`, '⭐');
+                        }}
+                      >
                         {isFrench ? 'Réserver' : 'Book'} →
                       </button>
                     </div>
@@ -440,7 +547,23 @@ export default function ClientDashboard({
                         <span className="order-id-pill">{order.id}</span>
                         <h3 className="order-service-title">{order.title}</h3>
                         <p className="order-meta-info">
-                          🧑‍🔧 <strong>{order.artisan}</strong> ({order.profession}) • 📍 {order.location} • 🕒 {order.date}
+                          🧑‍🔧 <strong
+                            style={{ cursor: 'pointer', color: 'var(--primary)', textDecoration: 'underline' }}
+                            onClick={() => {
+                              const match = artisans.find((a) => a.name === order.artisan) || {
+                                name: order.artisan,
+                                profession: order.profession,
+                                city: order.location,
+                                location: order.location,
+                                phone: order.whatsapp,
+                                whatsapp: order.whatsapp
+                              };
+                              if (onSelectArtisan) onSelectArtisan(match);
+                            }}
+                            title={isFrench ? "Consulter le profil de l'artisan" : "View artisan profile"}
+                          >
+                            {order.artisan}
+                          </strong> ({order.profession}) • 📍 {order.location} • 🕒 {order.date}
                         </p>
                       </div>
 
@@ -581,18 +704,54 @@ export default function ClientDashboard({
 
           <div className="artisans-grid">
             {bookmarks.map((b) => (
-              <div key={b.id} className="artisan-card-luxury">
+              <div
+                key={b.id}
+                className="artisan-card-luxury clickable-profile-card"
+                onClick={() => onSelectArtisan && onSelectArtisan(b)}
+                title={isFrench ? `Consulter le profil de ${b.name}` : `View ${b.name}'s profile`}
+              >
                 <div className="artisan-card-img-wrap">
                   <img src={b.image} alt={b.name} />
                   <span className="artisan-badge-tag">FAVORI ✓</span>
+                  <div className="card-hover-profile-hint">
+                    <span>👁️ {isFrench ? 'Voir Profil' : 'View Profile'}</span>
+                  </div>
                 </div>
                 <div className="artisan-card-body">
                   <h3 className="artisan-card-name">{b.name}</h3>
                   <p className="artisan-card-prof">{b.profession}</p>
                   <p className="artisan-card-location">📍 {b.city}</p>
                   <div className="artisan-card-actions">
-                    <button className="btn-whatsapp-card" onClick={() => openWhatsApp(b.whatsapp)}>💬 WhatsApp</button>
-                    <button className="btn-cancel-action" onClick={() => handleRemoveBookmark(b.id)}>🗑️ Retirer</button>
+                    <button
+                      type="button"
+                      className="btn-view-profile-card"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onSelectArtisan) onSelectArtisan(b);
+                      }}
+                    >
+                      👁️ {isFrench ? 'Consulter le Profil' : 'View Profile'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-whatsapp-card"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openWhatsApp(b.whatsapp);
+                      }}
+                    >
+                      💬 WhatsApp
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-cancel-action"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveBookmark(b.id);
+                      }}
+                    >
+                      🗑️ Retirer
+                    </button>
                   </div>
                 </div>
               </div>

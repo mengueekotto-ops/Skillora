@@ -13,6 +13,7 @@ export const translations = {
     wallet: "Wallet",
     settings: "Settings",
     whatsappSupport: "WhatsApp",
+    adminPortal: "Super Admin Portal",
     
     // Role selection
     roleHeroTitle: "Your Gateway to Verified Expertise",
@@ -109,6 +110,7 @@ export const translations = {
     wallet: "Portefeuille",
     settings: "Paramètres",
     whatsappSupport: "WhatsApp",
+    adminPortal: "Portail Super Administrateur",
     
     // Role selection
     roleHeroTitle: "Votre Passerelle vers l'Expertise Certifiée",

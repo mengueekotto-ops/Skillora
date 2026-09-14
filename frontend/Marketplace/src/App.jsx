@@ -13,7 +13,9 @@ import HoloToast, { AiAssistantModal } from './components/HoloToast';
 
 function App() {
   const [lang, setLang] = useState('fr'); // Default to French, seamlessly switchable to English
-  const [screen, setScreen] = useState('role-selection'); // 'role-selection' | 'client-auth' | 'artisan-auth' | 'client-dashboard' | 'artisan-dashboard'
+  const [screen, setScreen] = useState('role-selection'); // 'role-selection' | 'client-auth' | 'artisan-auth' | 'client-dashboard' | 'artisan-dashboard' | 'artisan-detail'
+  const [selectedArtisan, setSelectedArtisan] = useState(null);
+  const [selectedArtisanId, setSelectedArtisanId] = useState(null);
   const [walletBalance, setWalletBalance] = useState(0); // 0.00 FCFA default initial balance
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -49,8 +51,22 @@ function App() {
     setScreen('artisan-dashboard');
   };
 
+  const handleViewArtisanProfile = (artisan) => {
+    setSelectedArtisan(artisan);
+    setSelectedArtisanId(artisan?.id || null);
+    setScreen('artisan-detail');
+  };
+
+  const handleBackToClientDashboard = () => {
+    setScreen('client-dashboard');
+    setSelectedArtisan(null);
+    setSelectedArtisanId(null);
+  };
+
   const handleLogout = () => {
     setIsSettingsOpen(false);
+    setSelectedArtisan(null);
+    setSelectedArtisanId(null);
     setScreen('role-selection');
     triggerToast(lang === 'fr' ? 'Déconnexion effectuée avec succès' : 'Logged out successfully', '👋');
   };
@@ -148,12 +164,36 @@ function App() {
             triggerToast={triggerToast}
             t={t}
             lang={lang}
+            onSelectArtisan={handleViewArtisanProfile}
           />
         )}
 
+        {/* Read-Only Artisan Detail View for Clients */}
+        {screen === 'artisan-detail' && (
+          <ArtisanDashboard
+            artisan={selectedArtisan}
+            artisanId={selectedArtisanId}
+            isReadOnly={true}
+            currentUser={currentUser}
+            userRole={currentUser?.role || 'CUSTOMER'}
+            onBack={handleBackToClientDashboard}
+            walletBalance={walletBalance}
+            onOpenWallet={() => setIsWalletOpen(true)}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            triggerToast={triggerToast}
+            t={t}
+            lang={lang}
+          />
+        )}
+
+        {/* Artisan Self-Dashboard with Full Edit Capabilities */}
         {screen === 'artisan-dashboard' && (
           <ArtisanDashboard
+            artisan={currentUser}
+            isReadOnly={false}
             currentUser={currentUser}
+            userRole={currentUser?.role || 'PROFESSIONAL'}
+            onBack={() => setScreen('role-selection')}
             walletBalance={walletBalance}
             onOpenWallet={() => setIsWalletOpen(true)}
             onOpenSettings={() => setIsSettingsOpen(true)}

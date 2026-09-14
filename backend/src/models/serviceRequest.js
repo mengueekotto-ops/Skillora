@@ -1,66 +1,57 @@
-const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/database");
+const mongoose = require("mongoose");
 
-const ServiceRequest = sequelize.define(
-  "ServiceRequest",
+const serviceRequestSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
     customerId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "users",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
+
     professionalId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "professionals",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Professional",
+      required: true,
     },
+
     serviceId: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: {
-        model: "services",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Service",
+      default: null,
     },
+
     description: {
-      type: DataTypes.TEXT,
-      allowNull: false,
+      type: String,
+      required: true,
     },
+
     location: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: String,
+      default: null,
     },
+
     scheduledDate: {
-      type: DataTypes.DATE,
-      allowNull: true,
+      type: Date,
+      default: null,
     },
+
     status: {
-      type: DataTypes.ENUM(
+      type: String,
+      enum: [
         "PENDING",
         "ACCEPTED",
         "REJECTED",
         "IN_PROGRESS",
         "COMPLETED",
-        "CANCELLED"
-      ),
-      defaultValue: "PENDING",
+        "CANCELLED",
+      ],
+      default: "PENDING",
     },
   },
   {
-    tableName: "service_requests",
     timestamps: true,
+    collection: "service_requests",
   }
 );
 
-module.exports = ServiceRequest;
+module.exports = mongoose.model("ServiceRequest", serviceRequestSchema);

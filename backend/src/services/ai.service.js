@@ -1,47 +1,66 @@
 /**
  * Skillora AI Service Module
- * Integrated with OpenRouter API (minimax/minimax-m3:free & fallback models)
- * Supports question generation, technical evaluation, intent extraction & verification scoring.
+ * Integrated with OpenRouter. Supports question generation, technical evaluation,
+ * intent extraction & verification scoring, with offline fallbacks for every feature.
  */
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || null; // never hardcode keys — set it in backend/.env
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "minimax/minimax-m3:free";
+
+// Comma-separated list, tried in order. Free models are often rate-limited, so several are listed.
+const OPENROUTER_MODELS = (
+  process.env.OPENROUTER_MODEL ||
+  "google/gemma-4-31b-it:free,qwen/qwen3.8-27b:free,google/gemma-4-26b-a4b-it:free,nvidia/nemotron-3-super-120b-a12b:free"
+)
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
+
+const OPENROUTER_TIMEOUT_MS = 30000;
+
+async function callModel(model, messages, temperature) {
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+      "HTTP-Referer": process.env.PUBLIC_APP_URL || "http://localhost:5173",
+      "X-Title": "Skillora Platform",
+    },
+    body: JSON.stringify({ model, messages, temperature }),
+    signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) {
+    throw new Error(`${response.status} ${data.error?.message || "request failed"}`);
+  }
+
+  // Reasoning models may wrap their thoughts in <think> tags; keep only the answer
+  const content = String(data.choices?.[0]?.message?.content || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .trim();
+  if (!content) throw new Error("empty response");
+  return content;
+}
 
 /**
- * Helper to call OpenRouter Chat Completions API
+ * Call OpenRouter, trying each configured model until one answers.
+ * Returns null when AI is unavailable so callers use their offline fallback.
  */
 async function callOpenRouter(messages, temperature = 0.4) {
   if (!OPENROUTER_API_KEY) {
     // No key configured: callers fall back to the built-in question banks and rules
     return null;
   }
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-        "HTTP-Referer": "http://localhost:5000",
-        "X-Title": "Skillora Platform",
-      },
-      body: JSON.stringify({
-        model: OPENROUTER_MODEL,
-        messages,
-        temperature,
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`OpenRouter API error ${response.status}: ${errText}`);
+  for (const model of OPENROUTER_MODELS) {
+    try {
+      return await callModel(model, messages, temperature);
+    } catch (err) {
+      console.warn(`⚠️ OpenRouter model ${model} failed: ${err.message}`);
     }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || "";
-  } catch (err) {
-    console.warn("⚠️ OpenRouter API call failed:", err.message);
-    return null;
   }
+  console.warn("⚠️ All OpenRouter models failed; using offline fallback.");
+  return null;
 }
 
 // Trade Technical Question Fallback Bank
@@ -327,10 +346,19 @@ Return ONLY valid JSON with this exact structure:
   }
 
   // Fallback: select from local MCQ bank
-  const lowerProf = profession.toLowerCase();
+  // Match English and French trade names (accents removed), e.g. "Électricien", "Plombier"
+  const lowerProf = profession.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const TRADE_ALIASES = {
+    electrician: ["electric", "electri", "solaire", "solar"],
+    plumber: ["plumb", "plomb", "sanitaire"],
+    carpenter: ["carpent", "menuisi", "charpent", "ebenist"],
+    mason: ["mason", "macon", "maconn", "btp"],
+    painter: ["paint", "peint"],
+    welder: ["weld", "soud", "metal"],
+  };
   let bankKey = "default";
-  for (const key of Object.keys(mcqFallbackBank)) {
-    if (lowerProf.includes(key)) {
+  for (const [key, aliases] of Object.entries(TRADE_ALIASES)) {
+    if (mcqFallbackBank[key] && aliases.some((a) => lowerProf.includes(a))) {
       bankKey = key;
       break;
     }

@@ -8,7 +8,8 @@
     "dev": "nodemon src/index.js",
     "seed": "node src/seeders/seed.js",
     "test:e2e": "node tests/e2e.test.mjs",
-    "test:geo": "node tests/verify-geolocation.js"
+    "test:geo": "node tests/verify-geolocation.js",
+    "admin": "node src/scripts/admin.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -1,3 +1,4 @@
+const { safeRegex } = require("../utils/regex.util");
 const { Professional, User, Service, Category, Review } = require("../models");
 const { calculateHaversineDistance, formatDistance } = require("../utils/distance.util");
 
@@ -29,7 +30,7 @@ const recommendProfessionals = async ({
   professionals = professionals.filter((p) => p.userId && p.userId.isActive !== false);
 
   if (location) {
-    const locReg = new RegExp(location, "i");
+    const locReg = safeRegex(location);
     professionals = professionals.filter(
       (p) => p.userId && p.userId.location && locReg.test(p.userId.location)
     );

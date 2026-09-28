@@ -108,7 +108,7 @@ const NOTIFICATION_ICONS = { PAYMENT: '💳', REQUEST: '📋', REQUEST_UPDATE: '
 const NOTIFICATION_POLL_MS = 60 * 1000;
 
 /** Live notifications of the logged-in user, refreshed every minute. */
-function useNotifications(enabled) {
+export function useNotifications(enabled) {
   const [items, setItems] = useState([]);
 
   const refresh = useCallback(async () => {
@@ -139,7 +139,7 @@ function NotificationBell({ onClick, unread }) {
     <button type="button" onClick={onClick} className={`relative ${ICON_BUTTON_CLASS}`} aria-label={`Notifications (${unread})`}>
       <span className="text-lg leading-none">🔔</span>
       {unread > 0 && (
-        <span className="absolute top-1.5 right-1.5 flex items-center justify-center min-w-3.5 h-3.5 px-0.5 bg-red-500 border-[1.5px] border-white dark:border-[#0f172a] text-white text-[9px] font-bold rounded-full">
+        <span className="absolute top-1.5 right-1.5 flex items-center justify-center min-w-3.5 h-3.5 px-0.5 bg-red-500 border-[1.5px] border-white dark:border-[#13201a] text-white text-[9px] font-bold rounded-full">
           {unread > 9 ? '9+' : unread}
         </span>
       )}
@@ -196,7 +196,7 @@ function NotificationItem({ icon, title, body, time, read }) {
   );
 }
 
-function NotificationPanel({ onClose, items, onMarkAllRead, lang }) {
+export function NotificationPanel({ onClose, items, onMarkAllRead, lang }) {
   return (
     <div
       className="notification-panel-overlay fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
@@ -260,7 +260,7 @@ function AiAssistantBadge({ onClick, lang }) {
     <button
       type="button"
       onClick={onClick}
-      className="fixed bottom-6 left-6 z-[9999] flex items-center gap-3 px-4 py-2 rounded-full bg-[#0f172a] hover:bg-[#1e293b] border border-[#334155] shadow-[0_10px_40px_rgba(0,0,0,0.5)] active:scale-95 transition-all duration-200 group"
+      className="fixed bottom-6 left-6 z-[9999] flex items-center gap-3 px-4 py-2 rounded-full bg-[#13201a] hover:bg-[#183526] border border-[#2c3a32] shadow-[0_10px_40px_rgba(0,0,0,0.5)] active:scale-95 transition-all duration-200 group"
       title="Skillora AI Assistant"
     >
       {/* Icon */}

@@ -190,8 +190,8 @@ export default function VerificationQuiz({
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(34,211,168,0.4); } 50% { box-shadow: 0 0 0 12px rgba(34,211,168,0); } }
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-        .vq-option:hover { background: rgba(124,58,237,0.15) !important; border-color: rgba(167,139,250,0.5) !important; transform: translateX(3px); }
-        .vq-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(124,58,237,0.6) !important; }
+        .vq-option:hover { background: rgba(34, 160, 75,0.15) !important; border-color: rgba(127, 227, 160,0.5) !important; transform: translateX(3px); }
+        .vq-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(34, 160, 75,0.6) !important; }
         .vq-btn-secondary:hover { background: rgba(255,255,255,0.1) !important; color: #e2e8f0 !important; }
       `}</style>
 
@@ -206,7 +206,7 @@ export default function VerificationQuiz({
             </h2>
             <p style={S.subtitle}>
               {isFr ? 'Profession évaluée : ' : 'Profession assessed: '}
-              <strong style={{ color: '#a78bfa' }}>{profession}</strong>
+              <strong style={{ color: '#7fe3a0' }}>{profession}</strong>
             </p>
 
             <div style={S.ruleBox}>
@@ -240,7 +240,7 @@ export default function VerificationQuiz({
         {screen === 'loading' && (
           <div style={S.center}>
             <div style={S.spinner} />
-            <p style={{ ...S.subtitle, marginTop: 20, color: '#a78bfa' }}>{loadingMsg}</p>
+            <p style={{ ...S.subtitle, marginTop: 20, color: '#7fe3a0' }}>{loadingMsg}</p>
           </div>
         )}
 
@@ -276,7 +276,7 @@ export default function VerificationQuiz({
               <div>
                 <div style={S.questionMeta}>
                   {isFr ? 'Question' : 'Question'}&nbsp;
-                  <span style={{ color: '#a78bfa' }}>{currentIdx + 1}</span>
+                  <span style={{ color: '#7fe3a0' }}>{currentIdx + 1}</span>
                   <span style={{ color: '#475569' }}> / {TOTAL_QUESTIONS}</span>
                 </div>
                 <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>{profession}</div>
@@ -359,10 +359,10 @@ export default function VerificationQuiz({
                     background: i < answers.length
                       ? '#22d3a8'
                       : i === currentIdx
-                      ? '#a78bfa'
+                      ? '#7fe3a0'
                       : 'rgba(255,255,255,0.1)',
                     transform: i === currentIdx ? 'scale(1.4)' : 'scale(1)',
-                    boxShadow: i === currentIdx ? '0 0 8px rgba(167,139,250,0.6)' : 'none',
+                    boxShadow: i === currentIdx ? '0 0 8px rgba(127, 227, 160,0.6)' : 'none',
                   }}
                 />
               ))}
@@ -414,7 +414,7 @@ export default function VerificationQuiz({
             <div style={S.statsBox}>
               {[
                 { label: isFr ? 'Réponses correctes' : 'Correct answers', value: `${result.score} / 10`, color: '#22d3a8' },
-                { label: isFr ? 'Seuil de réussite' : 'Passing threshold', value: '60%', color: '#a78bfa' },
+                { label: isFr ? 'Seuil de réussite' : 'Passing threshold', value: '60%', color: '#7fe3a0' },
                 { label: isFr ? 'Statut actuel' : 'Current status', value: result.passed ? (isFr ? '✓ Vérifié' : '✓ Verified') : (isFr ? '✗ Non vérifié' : '✗ Unverified'), color: result.passed ? '#22d3a8' : '#f87171' },
                 { label: isFr ? 'Tentatives' : 'Total attempts', value: String(result.attempts), color: '#94a3b8' },
               ].map(({ label, value, color }, i) => (
@@ -512,7 +512,7 @@ const S = {
   },
   inlineModal: {
     background: 'linear-gradient(160deg, #0a0f1e 0%, #1a1040 55%, #0a0f1e 100%)',
-    border: '1px solid rgba(167, 139, 250, 0.22)',
+    border: '1px solid rgba(127, 227, 160, 0.22)',
     borderRadius: 20,
     boxShadow: '0 16px 50px rgba(0,0,0,0.6), 0 0 40px rgba(139,92,246,0.1)',
     width: '100%',
@@ -531,7 +531,7 @@ const S = {
   },
   modal: {
     background: 'linear-gradient(160deg, #0a0f1e 0%, #1a1040 55%, #0a0f1e 100%)',
-    border: '1px solid rgba(167, 139, 250, 0.22)',
+    border: '1px solid rgba(127, 227, 160, 0.22)',
     borderRadius: 22,
     boxShadow: '0 30px 90px rgba(0,0,0,0.8), 0 0 80px rgba(139,92,246,0.12), inset 0 1px 0 rgba(255,255,255,0.05)',
     width: '100%', maxWidth: 540,
@@ -539,7 +539,7 @@ const S = {
     padding: 32, position: 'relative',
     animation: 'fadeInUp 0.3s ease',
     scrollbarWidth: 'thin',
-    scrollbarColor: 'rgba(167,139,250,0.3) transparent',
+    scrollbarColor: 'rgba(127, 227, 160,0.3) transparent',
   },
   center: {
     display: 'flex', flexDirection: 'column',
@@ -547,7 +547,7 @@ const S = {
   },
   heroBadge: {
     fontSize: '3.8rem', marginBottom: 8,
-    filter: 'drop-shadow(0 0 24px rgba(167,139,250,0.7))',
+    filter: 'drop-shadow(0 0 24px rgba(127, 227, 160,0.7))',
   },
   title: {
     fontSize: '1.45rem', fontWeight: 800, color: '#f1f5f9',
@@ -568,9 +568,9 @@ const S = {
   ruleText: { fontSize: '0.87rem', color: '#cbd5e1', lineHeight: 1.5 },
   btnPrimary: {
     padding: '12px 28px', borderRadius: 13, border: 'none',
-    background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
+    background: 'linear-gradient(135deg, #22a04b, #a855f7)',
     color: '#fff', fontWeight: 700, fontSize: '0.95rem',
-    cursor: 'pointer', boxShadow: '0 4px 22px rgba(124,58,237,0.45)',
+    cursor: 'pointer', boxShadow: '0 4px 22px rgba(34, 160, 75,0.45)',
     fontFamily: "'Outfit', 'Inter', sans-serif",
     transition: 'all 0.2s ease',
     display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -592,8 +592,8 @@ const S = {
   },
   spinner: {
     width: 52, height: 52, borderRadius: '50%',
-    border: '3px solid rgba(167,139,250,0.12)',
-    borderTopColor: '#a78bfa',
+    border: '3px solid rgba(127, 227, 160,0.12)',
+    borderTopColor: '#7fe3a0',
     animation: 'spin 0.85s linear infinite',
   },
   // Quiz screen
@@ -617,7 +617,7 @@ const S = {
   },
   progressFill: {
     height: '100%',
-    background: 'linear-gradient(90deg, #7c3aed, #22d3a8)',
+    background: 'linear-gradient(90deg, #22a04b, #22d3a8)',
     borderRadius: 999, transition: 'width 0.45s ease',
   },
   questionBox: {
@@ -629,7 +629,7 @@ const S = {
     display: 'flex', gap: 10,
   },
   qIndex: {
-    color: '#a78bfa', fontWeight: 800, fontSize: '1.05rem', flexShrink: 0,
+    color: '#7fe3a0', fontWeight: 800, fontSize: '1.05rem', flexShrink: 0,
   },
   option: {
     display: 'flex', alignItems: 'center', gap: 12,
@@ -640,19 +640,19 @@ const S = {
     fontFamily: "'Outfit', 'Inter', sans-serif",
   },
   optionSelected: {
-    background: 'rgba(124,58,237,0.18)',
-    border: '1.5px solid rgba(167,139,250,0.65)',
+    background: 'rgba(34, 160, 75,0.18)',
+    border: '1.5px solid rgba(127, 227, 160,0.65)',
     color: '#f1f5f9',
-    boxShadow: '0 0 14px rgba(124,58,237,0.22)',
+    boxShadow: '0 0 14px rgba(34, 160, 75,0.22)',
   },
   optLetter: {
     minWidth: 30, height: 30, borderRadius: 9,
-    background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)',
+    background: 'rgba(127, 227, 160,0.1)', border: '1px solid rgba(127, 227, 160,0.25)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontWeight: 800, fontSize: '0.78rem', color: '#a78bfa', flexShrink: 0,
+    fontWeight: 800, fontSize: '0.78rem', color: '#7fe3a0', flexShrink: 0,
   },
   optLetterSelected: {
-    background: 'rgba(167,139,250,0.3)', border: '1px solid #a78bfa', color: '#fff',
+    background: 'rgba(127, 227, 160,0.3)', border: '1px solid #7fe3a0', color: '#fff',
   },
   optText: { fontSize: '0.9rem', lineHeight: 1.45, flex: 1 },
   checkMark: { color: '#22d3a8', fontWeight: 800, fontSize: '0.95rem', marginLeft: 'auto' },

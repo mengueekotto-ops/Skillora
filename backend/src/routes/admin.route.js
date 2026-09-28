@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { authenticateAdmin, requireAdminRole } = require("../middleware/adminAuth.middleware");
+const { adminLoginLimiter } = require("../middleware/rateLimit.middleware");
 const {
   adminLogin,
   adminGetMe,
@@ -24,10 +25,12 @@ const {
   deleteCategory,
   sendNotification,
   globalSearch,
+  getAdminOverview,
+  getPayments,
 } = require("../controllers/admin.controller");
 
 // Public admin auth routes (no token needed)
-router.post("/auth/login", adminLogin);
+router.post("/auth/login", adminLoginLimiter, adminLogin);
 
 // All routes below require admin authentication
 router.use(authenticateAdmin);
@@ -37,6 +40,8 @@ router.get("/auth/me", adminGetMe);
 
 // Dashboard stats
 router.get("/stats", getAdminStats);
+router.get("/overview", getAdminOverview);
+router.get("/payments", getPayments);
 
 // Global search
 router.get("/search", globalSearch);

@@ -13,8 +13,8 @@ const getJwtSecret = () => {
   return secret;
 };
 
-const signToken = (payload) =>
-  jwt.sign(payload, getJwtSecret(), { expiresIn: process.env.JWT_EXPIRES_IN || "7d" });
+const signToken = (payload, { expiresIn } = {}) =>
+  jwt.sign(payload, getJwtSecret(), { expiresIn: expiresIn || process.env.JWT_EXPIRES_IN || "7d" });
 
 const verifyToken = (token) => jwt.verify(token, getJwtSecret());
 

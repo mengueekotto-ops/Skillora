@@ -1,0 +1,110 @@
+/* ==========================================================================
+   Skillora theme — single source of truth for the platform palette.
+   Based on the client dashboard (deep forest green + fresh green accents).
+   Loaded after App.css, so it also re-maps the older variables used by
+   the rest of the app (artisan dashboard, admin, modals…).
+   ========================================================================== */
+
+:root {
+  /* Brand tokens */
+  --sk-green-950: #07130d;
+  --sk-green-900: #0c1d15;
+  --sk-green-850: #0f2319;
+  --sk-green-800: #183526;
+  --sk-green-700: #16733a;
+  --sk-green-600: #1c8a45;
+  --sk-green-500: #22a04b;
+  --sk-green-400: #37c064;
+  --sk-green-300: #7fe3a0;
+  --sk-green-200: #c6e4cd;
+  --sk-green-100: #dcefe0;
+  --sk-green-50: #eef2ee;
+  --sk-ink: #13201a;
+  --sk-ink-soft: #2c3a32;
+  --sk-muted: #6b7a71;
+  --sk-dim: #93a198;
+  --sk-line: #e3e9e3;
+  --sk-white: #ffffff;
+  --sk-radius: 18px;
+  --sk-font: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Legacy variables used across the app, re-mapped to the brand */
+  --bg-body: var(--sk-green-50);
+  --bg-surface: #f7f9f6;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f6f2;
+  --bg-input: #ffffff;
+  --bg-input-focus: #ffffff;
+
+  --primary: var(--sk-green-600);
+  --primary-hover: var(--sk-green-700);
+  --primary-light: var(--sk-green-100);
+  --primary-glow: 0 8px 25px rgba(28, 138, 69, 0.22);
+  --purple: var(--sk-green-500);
+  --purple-hover: var(--sk-green-600);
+  --purple-light: var(--sk-green-100);
+  --purple-glow: 0 8px 25px rgba(34, 160, 75, 0.22);
+  --gradient-primary: linear-gradient(135deg, var(--sk-green-500) 0%, var(--sk-green-850) 100%);
+  --gradient-primary-hover: linear-gradient(135deg, var(--sk-green-600) 0%, var(--sk-green-900) 100%);
+  --gradient-soft: linear-gradient(135deg, rgba(34, 160, 75, 0.08), rgba(15, 35, 25, 0.06));
+  --gold: var(--sk-green-600);
+  --gold-light: var(--sk-green-400);
+  --gold-dim: rgba(28, 138, 69, 0.1);
+  --gold-glow: 0 8px 25px rgba(28, 138, 69, 0.2);
+  --border-gold: rgba(28, 138, 69, 0.25);
+  --artisan-accent: var(--sk-green-600);
+  --artisan-soft: rgba(34, 160, 75, 0.1);
+  --artisan-border: rgba(34, 160, 75, 0.25);
+
+  --font-serif: var(--sk-font);
+  --font-sans: var(--sk-font);
+
+  --text-white: var(--sk-ink);
+  --text-main: var(--sk-ink);
+  --text-cream: var(--sk-ink-soft);
+  --text-muted: var(--sk-muted);
+  --text-dim: var(--sk-dim);
+  --border-subtle: var(--sk-line);
+  --border-hover: #cfdad1;
+  --border-strong: var(--sk-dim);
+  --shadow-card: 0 1px 2px rgba(16, 35, 25, 0.04), 0 8px 24px rgba(16, 35, 25, 0.06);
+  --shadow-hover: 0 12px 30px -4px rgba(28, 138, 69, 0.18);
+}
+
+[data-theme='dark'],
+html.dark,
+body.dark {
+  --sk-ink: #e7efe9;
+  --sk-ink-soft: #c8d6cc;
+  --sk-muted: #8ea196;
+  --sk-dim: #66786d;
+  --sk-line: #1e3228;
+
+  --bg-body: #050c08;
+  --bg-surface: #0c1711;
+  --bg-card: #122019;
+  --bg-card-hover: #183526;
+  --bg-input: #0f1c15;
+  --bg-input-focus: #13241a;
+
+  --primary: var(--sk-green-400);
+  --primary-hover: var(--sk-green-500);
+  --primary-light: rgba(55, 192, 100, 0.15);
+  --artisan-accent: var(--sk-green-400);
+  --gold: var(--sk-green-400);
+  --gold-light: var(--sk-green-300);
+
+  --text-white: #ffffff;
+  --text-main: #e7efe9;
+  --text-cream: #c8d6cc;
+  --text-muted: #8ea196;
+  --text-dim: #66786d;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.16);
+  --border-strong: #2a4034;
+  --shadow-card: 0 4px 25px rgba(0, 0, 0, 0.45);
+}
+
+body {
+  font-family: var(--sk-font);
+}

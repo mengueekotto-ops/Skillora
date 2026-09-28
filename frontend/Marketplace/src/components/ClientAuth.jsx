@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import ForgotPasswordModal from './ForgotPasswordModal';
 import { api, normalizeUser, saveSession } from '../api';
+import AuthShell, { AuthField, PasswordInput, StrengthMeter } from './AuthShell';
 
-export default function ClientAuth({ initialTab, setAuthTab, onSwitchToArtisan, onBackToLanding, onLoginSuccess, triggerToast, t, lang, setLang, theme, setTheme }) {
+export default function ClientAuth({ initialTab, setAuthTab, onSwitchToArtisan, onBackToLanding, onLoginSuccess, triggerToast, t, lang, setLang }) {
   const [tab, setTabState] = useState(initialTab || 'login');
   const [rememberMe, setRememberMe] = useState(false);
   const [showPass, setShowPass] = useState(false);
@@ -113,282 +114,151 @@ export default function ClientAuth({ initialTab, setAuthTab, onSwitchToArtisan, 
     }
   };
 
-  const openWhatsAppHelp = () => {
-    window.open('https://wa.me/237670000000?text=Hello%20Skillora%20Support,%20I%20need%20help%20with%20client%20registration', '_blank');
-  };
+  const tr = (fr, en) => (lang === 'fr' ? fr : en);
 
   return (
-    <div className="onboarding-screen-wrapper client-theme relative w-full flex flex-col items-center justify-center overflow-hidden" style={{ paddingTop: '60px' }}>
-      {/* Full-Width Top Header Navbar — Same as Home Page */}
-      <header className="fullwidth-top-navbar w-full fixed top-0 left-0 right-0 z-50">
-        <div className="navbar-fullwidth-inner w-full flex items-center justify-between px-6 py-3">
-          <div className="landing-brand flex items-center gap-2">
-            <span className="brand-icon-gem text-2xl" onClick={onBackToLanding} style={{ cursor: 'pointer' }}>💎</span>
-            <span className="brand-name text-xl font-extrabold tracking-tight" onClick={onBackToLanding} style={{ cursor: 'pointer' }}>Skillora</span>
-            {onBackToLanding && (
-              <button className="auth-back-btn ml-2" onClick={onBackToLanding} title="Retour à l'accueil" style={{ padding: '0.2rem 0.6rem', fontSize: '0.78rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: 'inherit', cursor: 'pointer' }}>
-                ← {lang === 'fr' ? 'Accueil' : 'Home'}
-              </button>
-            )}
-          </div>
+    <AuthShell
+      lang={lang}
+      setLang={setLang}
+      onBack={onBackToLanding}
+      tagline={tr('Des artisans vérifiés, un paiement protégé', 'Verified artisans, protected payments')}
+    >
+      {tab === 'login' ? (
+        <form onSubmit={handleLogin} className="auth2-form" noValidate={false}>
+          <h1 className="auth2-title">{tr('Connexion', 'Sign in')}</h1>
+          <p className="auth2-subtitle">{tr('Accédez à votre espace client Skillora.', 'Access your Skillora client workspace.')}</p>
 
-          <div className="landing-controls flex items-center gap-3">
-            {/* Language Switcher */}
-            <div className="lang-switcher-pill flex items-center rounded-lg p-1 text-xs">
-              <button
-                className={`lang-btn px-2 py-1 rounded font-bold transition-all ${lang === 'en' ? 'active' : ''}`}
-                onClick={() => setLang && setLang('en')}
-                title="English"
-              >
-                🇬🇧 EN
-              </button>
-              <span className="lang-divider px-1 opacity-40">|</span>
-              <button
-                className={`lang-btn px-2 py-1 rounded font-bold transition-all ${lang === 'fr' ? 'active' : ''}`}
-                onClick={() => setLang && setLang('fr')}
-                title="Français"
-              >
-                🇫🇷 FR
-              </button>
-            </div>
+          <AuthField
+            id="client-email"
+            label={tr('Votre e-mail ou téléphone', 'Your email or phone')}
+            type="text"
+            autoComplete="username"
+            placeholder="valerie@exemple.cm"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
 
-            {/* Theme Toggle */}
-            <div className="theme-toggle-pill flex items-center rounded-lg p-1 text-xs">
-              <button
-                type="button"
-                className={`theme-toggle-btn px-2 py-1 rounded font-semibold transition-all ${theme === 'light' ? 'active' : ''}`}
-                onClick={() => setTheme && setTheme('light')}
-                title="Mode Clair"
-              >
-                ☀️ <span className="theme-toggle-label ml-1">Clair</span>
+          <AuthField
+            id="client-password"
+            label={tr('Mot de passe', 'Password')}
+            extra={
+              <button type="button" className="auth2-link" onClick={() => setIsForgotModalOpen(true)}>
+                {tr('Mot de passe oublié ?', 'Forgot password?')}
               </button>
-              <button
-                type="button"
-                className={`theme-toggle-btn px-2 py-1 rounded font-semibold transition-all ${theme === 'dark' ? 'active' : ''}`}
-                onClick={() => setTheme && setTheme('dark')}
-                title="Mode Sombre"
-              >
-                🌙 <span className="theme-toggle-label ml-1">Sombre</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+            }
+          >
+            <PasswordInput
+              id="client-password"
+              lang={lang}
+              autoComplete="current-password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              show={showPass}
+              onToggle={() => setShowPass(!showPass)}
+              required
+            />
+          </AuthField>
 
-      {/* Ultra-Compact Auth Card Fits Above the Fold (100vh) */}
-      <div className="auth-panel compact-panel login-card-spec w-full p-3 my-auto shadow-2xl rounded-2xl">
-        {/* Header (En-tête) */}
-        <div className="auth-header-spec text-center mb-2">
-          <h2 className="title-main" style={{ fontSize: '1.2rem', margin: '0 0 0.15rem 0' }}>{tab === 'login' ? (lang === 'fr' ? 'Bon retour' : 'Welcome Back') : t.createAccount}</h2>
-          <p className="subtitle-spec" style={{ fontSize: '0.75rem', margin: 0, color: 'var(--text-muted)' }}>
-            {tab === 'login'
-              ? (lang === 'fr' ? 'Veuillez entrer vos identifiants' : 'Please enter your credentials')
-              : (lang === 'fr' ? 'Rejoignez les clients qui réalisent leurs projets en toute sérénité.' : 'Join clients hiring elite professionals with escrow protection.')}
+          <label className="auth2-remember">
+            <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+            {tr('Se souvenir de moi', 'Remember me')}
+          </label>
+
+          <button type="submit" className="auth2-btn" disabled={isSubmitting}>
+            {isSubmitting ? tr('Connexion…', 'Signing in…') : tr('Se connecter', 'Sign in')}
+          </button>
+
+          <p className="auth2-bottom">
+            {tr("Pas encore de compte ?", "Don't have an account?")}
+            <button type="button" className="auth2-link strong" onClick={() => setTab('signup')}>
+              {tr("S'inscrire", 'Sign up')}
+            </button>
           </p>
-        </div>
 
-        {/* LOGIN FORM */}
-        {tab === 'login' ? (
-          <form onSubmit={handleLogin} className="login-form-spec space-y-2">
-            {/* Champ Adresse e-mail */}
-            <div className="field-group-spec">
-              <label className="field-label-dark" style={{ fontSize: '0.75rem' }}>Adresse e-mail</label>
-              <div className="input-wrap-spec">
-                <span className="input-icon-left">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="4" width="20" height="16" rx="2"></rect>
-                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
-                  </svg>
-                </span>
-                <input
-                  type="email"
-                  className="input-field-spec"
-                  placeholder="Entrez votre e-mail"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  style={{ padding: '0.45rem 0.6rem 0.45rem 2.2rem', fontSize: '0.82rem' }}
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Champ Mot de passe */}
-            <div className="field-group-spec">
-              <label className="field-label-dark" style={{ fontSize: '0.75rem' }}>Mot de passe</label>
-              <div className="input-wrap-spec">
-                <span className="input-icon-left">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                  </svg>
-                </span>
-                <input
-                  type={showPass ? 'text' : 'password'}
-                  className="input-field-spec"
-                  placeholder="Entrez votre mot de passe"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  style={{ padding: '0.45rem 2.2rem 0.45rem 2.2rem', fontSize: '0.82rem' }}
-                  required
-                />
-                <button
-                  type="button"
-                  className="pass-toggle-btn"
-                  onClick={() => setShowPass(!showPass)}
-                  title={showPass ? "Masquer le mot de passe" : "Afficher le mot de passe"}
-                >
-                  {showPass ? '🙈' : '👁'}
-                </button>
-              </div>
-            </div>
-
-            {/* Options et liens */}
-            <div className="login-options-row" style={{ fontSize: '0.75rem' }}>
-              <label className="remember-me-wrap">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="remember-checkbox"
-                />
-                <span className="remember-text">Se souvenir de moi</span>
-              </label>
-
-              <span
-                className="forgot-password-link"
-                onClick={() => setIsForgotModalOpen(true)}
-                style={{ cursor: 'pointer' }}
-              >
-                Mot de passe oublié ?
-              </span>
-            </div>
-
-            {/* Bouton d'action "Connexion" */}
-            <button type="submit" className="login-action-btn w-full" style={{ padding: '0.55rem', fontSize: '0.85rem' }} disabled={isSubmitting}>
-              {isSubmitting ? (lang === 'fr' ? 'Connexion en cours...' : 'Signing in...') : (lang === 'fr' ? 'Connexion' : 'Sign In')}
+          <div className="auth2-divider" />
+          <p className="auth2-role-switch">
+            {tr('Vous êtes artisan ou un atelier ?', 'Are you an artisan or a workshop?')}
+            <button type="button" className="auth2-link strong" onClick={onSwitchToArtisan}>
+              {tr('Espace artisan →', 'Artisan space →')}
             </button>
+          </p>
+        </form>
+      ) : (
+        <form onSubmit={handleSignup} className="auth2-form">
+          <h1 className="auth2-title">{tr('Créer un compte', 'Sign up')}</h1>
+          <p className="auth2-subtitle">
+            {tr('Trouvez et payez des artisans vérifiés en toute sécurité.', 'Find and safely pay verified artisans.')}
+          </p>
 
-            {/* Subtle bottom switch link */}
-            <div className="auth-bottom-switch" style={{ fontSize: '0.75rem' }}>
-              <span>{lang === 'fr' ? 'Pas encore de compte ? ' : "Don't have an account? "}</span>
-              <span className="auth-switch-link" onClick={() => setTab('signup')}>
-                {lang === 'fr' ? "S'inscrire" : 'Sign up'}
-              </span>
-            </div>
-          </form>
-        ) : (
-          /* SIGNUP FORM WITH MULTI-COLUMN GRID LAYOUT */
-          <form onSubmit={handleSignup}>
-            <div className="compact-form-grid">
-              <div className="field">
-                <label className="field-label" style={{ fontSize: '0.75rem' }}>{t.fullName}</label>
-                <div className="input-wrap">
-                  <span className="input-icon">👤</span>
-                  <input
-                    type="text"
-                    className="input-field"
-                    placeholder="Valerie Mbida"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    style={{ padding: '0.4rem 0.6rem 0.4rem 2.2rem', fontSize: '0.8rem' }}
-                    required
-                  />
-                </div>
-              </div>
+          <AuthField
+            id="client-name"
+            label={tr('Nom complet', 'Full name')}
+            type="text"
+            autoComplete="name"
+            placeholder="Valérie Mbida"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+          <AuthField
+            id="client-signup-email"
+            label={tr('Votre e-mail', 'Your email')}
+            type="email"
+            autoComplete="email"
+            placeholder="valerie@exemple.cm"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <AuthField
+            id="client-phone"
+            label={tr('Téléphone (Mobile Money)', 'Phone (Mobile Money)')}
+            type="tel"
+            autoComplete="tel"
+            placeholder="+237 6XX XX XX XX"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            required
+          />
+          <AuthField id="client-new-password" label={tr('Mot de passe', 'Password')}>
+            <PasswordInput
+              id="client-new-password"
+              lang={lang}
+              autoComplete="new-password"
+              placeholder={tr('8 caractères minimum', 'At least 8 characters')}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              show={showPass}
+              onToggle={() => setShowPass(!showPass)}
+              minLength={8}
+              required
+            />
+          </AuthField>
+          <StrengthMeter {...strength} />
 
-              <div className="field">
-                <label className="field-label" style={{ fontSize: '0.75rem' }}>{t.email}</label>
-                <div className="input-wrap">
-                  <span className="input-icon">✉</span>
-                  <input
-                    type="email"
-                    className="input-field"
-                    placeholder="valerie@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    style={{ padding: '0.4rem 0.6rem 0.4rem 2.2rem', fontSize: '0.8rem' }}
-                    required
-                  />
-                </div>
-              </div>
+          <button type="submit" className="auth2-btn" disabled={isSubmitting}>
+            {isSubmitting ? tr('Création du compte…', 'Creating account…') : tr('Créer mon compte', 'Create account')}
+          </button>
 
-              <div className="field">
-                <label className="field-label" style={{ fontSize: '0.75rem' }}>{t.phone}</label>
-                <div className="input-wrap">
-                  <span className="input-icon">📞</span>
-                  <input
-                    type="tel"
-                    className="input-field"
-                    placeholder="+237 6xx xx xx xx"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    style={{ padding: '0.4rem 0.6rem 0.4rem 2.2rem', fontSize: '0.8rem' }}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="field">
-                <label className="field-label" style={{ fontSize: '0.75rem' }}>{t.password}</label>
-                <div className="input-wrap">
-                  <span className="input-icon">🔒</span>
-                  <input
-                    type={showPass ? 'text' : 'password'}
-                    className="input-field"
-                    placeholder="Min 8 chars"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    style={{ padding: '0.4rem 2.2rem 0.4rem 2.2rem', fontSize: '0.8rem' }}
-                    required
-                  />
-                  <button type="button" className="pass-toggle" onClick={() => setShowPass(!showPass)}>
-                    {showPass ? '🙈' : '👁'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Strength Meter */}
-            <div className="strength-bar-wrap" style={{ margin: '0.3rem 0' }}>
-              <div className="strength-track">
-                <div
-                  className="strength-fill"
-                  style={{ width: `${strength.score}%`, background: strength.color }}
-                ></div>
-              </div>
-              <span className="strength-text" style={{ color: strength.color, fontSize: '0.7rem' }}>
-                {strength.text}
-              </span>
-            </div>
-
-            <button type="submit" className="submit-btn w-full" style={{ marginTop: '0.4rem', padding: '0.55rem', fontSize: '0.85rem' }} disabled={isSubmitting}>
-              {isSubmitting ? (lang === 'fr' ? 'Création du compte...' : 'Creating Account...') : `${t.createAccount} →`}
+          <p className="auth2-bottom">
+            {tr('Déjà un compte ?', 'Already have an account?')}
+            <button type="button" className="auth2-link strong" onClick={() => setTab('login')}>
+              {tr('Se connecter', 'Sign in')}
             </button>
+          </p>
 
-            {/* Subtle bottom switch link */}
-            <div className="auth-bottom-switch" style={{ fontSize: '0.75rem', marginTop: '0.35rem' }}>
-              <span>{lang === 'fr' ? 'Déjà un compte ? ' : 'Already have an account? '}</span>
-              <span className="auth-switch-link" onClick={() => setTab('login')}>
-                {lang === 'fr' ? 'Se connecter' : 'Sign in'}
-              </span>
-            </div>
-          </form>
-        )}
+          <div className="auth2-divider" />
+          <p className="auth2-role-switch">
+            {tr('Vous êtes artisan ou un atelier ?', 'Are you an artisan or a workshop?')}
+            <button type="button" className="auth2-link strong" onClick={onSwitchToArtisan}>
+              {tr('Espace artisan →', 'Artisan space →')}
+            </button>
+          </p>
+        </form>
+      )}
 
-        {/* WhatsApp direct help pill */}
-        <div className="whatsapp-help-box" onClick={openWhatsAppHelp}>
-          <span>💬 {lang === 'fr' ? 'Besoin d\'aide ? Discutez directement avec nous sur WhatsApp' : 'Need assistance? Chat directly with Skillora on WhatsApp'}</span>
-        </div>
-
-        <div className="switch-role-footer">
-          <span>{lang === 'fr' ? 'Vous êtes un professionnel ou une équipe d\'artisans ?' : 'Are you a skilled artisan or workshop group?'}</span>
-          <span className="switch-role-link" onClick={onSwitchToArtisan}>
-            {lang === 'fr' ? 'Espace Artisan & Collectifs →' : 'Join as Artisan / Group →'}
-          </span>
-        </div>
-      </div>
-
-      {/* Forgot Password Modal */}
       <ForgotPasswordModal
         isOpen={isForgotModalOpen}
         onClose={() => setIsForgotModalOpen(false)}
@@ -399,6 +269,6 @@ export default function ClientAuth({ initialTab, setAuthTab, onSwitchToArtisan, 
           setPassword(resetPass);
         }}
       />
-    </div>
+    </AuthShell>
   );
 }

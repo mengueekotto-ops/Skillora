@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import './theme.css';
 import { translations } from './translations';
 import Navbar from './components/Navbar';
-import RoleSelection from './components/RoleSelection';
+import Landing from './components/Landing';
 import ClientAuth from './components/ClientAuth';
 import ArtisanAuth from './components/ArtisanAuth';
 import ClientDashboard from './components/ClientDashboard';
@@ -173,9 +174,41 @@ function App() {
         triggerToast={triggerToast}
       />
 
-      <div className="app-shell">
+      {/* Client workspace: full-screen sidebar layout (outside the centred shell) */}
+      {screen === 'client-dashboard' && (
+        <ClientDashboard
+          currentUser={currentUser}
+          setCurrentUser={setCurrentUser}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenAiAssistant={() => setIsAiAssistantOpen(true)}
+          onLogout={handleLogout}
+          triggerToast={triggerToast}
+          t={t}
+          lang={lang}
+          setLang={setLang}
+          theme={theme}
+          setTheme={setTheme}
+          onSelectArtisan={handleViewArtisanProfile}
+        />
+      )}
+
+      {/* Admin console: full-screen layout */}
+      {screen === 'admin-dashboard' && (
+        <AdminDashboard
+          onLogout={handleLogout}
+          onBackToMarketplace={() => setScreen('role-selection')}
+          triggerToast={triggerToast}
+          lang={lang}
+          setLang={setLang}
+          theme={theme}
+          setTheme={setTheme}
+          currentUser={currentUser}
+        />
+      )}
+
+      <div className="app-shell" style={['client-dashboard', 'admin-dashboard'].includes(screen) ? { display: 'none' } : undefined}>
         {/* Top Navigation Bar — Only visible when logged in (dashboard screens) */}
-        {!['role-selection', 'client-auth', 'artisan-auth', 'admin-auth'].includes(screen) && (
+        {!['role-selection', 'client-auth', 'artisan-auth', 'admin-auth', 'client-dashboard', 'admin-dashboard'].includes(screen) && (
           <Navbar
             screen={screen}
             setScreen={setScreen}
@@ -197,16 +230,15 @@ function App() {
 
         {/* Dynamic Screen Flow */}
         {screen === 'role-selection' && (
-          <RoleSelection
+          <Landing
             onSelectRole={(role, tab = 'login') => {
               setAuthTab(tab);
               setScreen(role);
             }}
-            t={t}
             lang={lang}
             setLang={setLang}
-            theme={theme}
-            setTheme={setTheme}
+            currentUser={currentUser}
+            onOpenWorkspace={() => currentUser && setScreen(screenForRole(currentUser.role))}
           />
         )}
 
@@ -251,22 +283,10 @@ function App() {
             onBack={() => setScreen('role-selection')}
             triggerToast={triggerToast}
             lang={lang}
+            setLang={setLang}
           />
         )}
 
-        {screen === 'client-dashboard' && (
-          <ClientDashboard
-            currentUser={currentUser}
-            setCurrentUser={setCurrentUser}
-            walletBalance={walletBalance}
-            onOpenWallet={() => setIsWalletOpen(true)}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            triggerToast={triggerToast}
-            t={t}
-            lang={lang}
-            onSelectArtisan={handleViewArtisanProfile}
-          />
-        )}
 
         {/* Read-Only Artisan Detail View for Clients */}
         {screen === 'artisan-detail' && (
@@ -304,14 +324,6 @@ function App() {
         )}
 
         {/* Master Admin Console / Dashboard */}
-        {screen === 'admin-dashboard' && (
-          <AdminDashboard
-            onLogout={handleLogout}
-            onBackToMarketplace={() => setScreen('role-selection')}
-            triggerToast={triggerToast}
-            lang={lang}
-          />
-        )}
       </div>
     </>
   );

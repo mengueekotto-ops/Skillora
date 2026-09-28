@@ -161,5 +161,34 @@ check("mark all notifications read", r.status === 200);
 r = await call("GET", "/notifications", { token: aTok });
 check("no unread notifications left", r.data.data.every((n) => n.isRead));
 
+console.log("\n10. Admin access & console");
+r = await call("GET", "/professionals?search=" + encodeURIComponent("(a+)+$(.*)*[{"));
+check("regex-like search is treated as plain text (no crash)", r.status === 200, r.status);
+r = await call("GET", "/admin/overview", { token: cTok });
+check("client cannot open admin overview → 403", r.status === 403, r.status);
+r = await call("GET", "/admin/overview");
+check("no token → 401 on admin overview", r.status === 401, r.status);
+if (process.env.ADMIN_TEST_EMAIL && process.env.ADMIN_TEST_PASSWORD) {
+  r = await call("POST", "/auth/login", { body: { email: process.env.ADMIN_TEST_EMAIL, password: process.env.ADMIN_TEST_PASSWORD } });
+  check("admin refused on the public login", r.status === 403, r.status);
+  r = await call("POST", "/admin/auth/login", { body: { email: process.env.ADMIN_TEST_EMAIL, password: process.env.ADMIN_TEST_PASSWORD } });
+  check("admin portal login works", r.status === 200 && r.data.data.token, r.status);
+  const adminTok = r.data?.data?.token;
+  const exp = adminTok ? JSON.parse(Buffer.from(adminTok.split(".")[1], "base64url")).exp : 0;
+  const hours = (exp * 1000 - Date.now()) / 3600000;
+  check("admin session expires in ~2 hours", hours > 1.9 && hours <= 2.01, hours.toFixed(2));
+  r = await call("GET", "/admin/overview", { token: adminTok });
+  check("overview has trends, money and activity", r.status === 200 && r.data.data.series.requests.length === 6 && r.data.data.money.volume >= 50000 && r.data.data.activity.length > 0, JSON.stringify(r.data).slice(0, 200));
+  check("overview counts platform fee (2% of 50 000)", r.data.data.money.platformFees >= 1000, r.data.data.money.platformFees);
+  r = await call("GET", "/admin/payments?status=SUCCESS", { token: adminTok });
+  check("admin payments list", r.status === 200 && r.data.data.length >= 1 && r.data.meta.total >= 1, r.status);
+  r = await call("GET", "/admin/verification-requests", { token: adminTok });
+  check("verification queue defaults to 'to review'", r.status === 200 && Array.isArray(r.data.data), r.status);
+  r = await call("GET", "/admin/users?search=" + encodeURIComponent("(a+)+$"), { token: adminTok });
+  check("admin user search escapes regex", r.status === 200, r.status);
+} else {
+  console.log("  (admin checks skipped: set ADMIN_TEST_EMAIL / ADMIN_TEST_PASSWORD)");
+}
+
 console.log(`\nResult: ${pass} passed, ${failCount} failed`);
 process.exit(failCount ? 1 : 0);

@@ -1,1670 +1,1028 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { api, avatarFor, formatDate, formatFCFA, PAYMENT_STATUS_LABELS, shortRef } from '../api';
+import './AdminDashboard.css';
 
-export default function AdminDashboard({ onLogout, onBackToMarketplace, triggerToast, lang = 'fr' }) {
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'users' | 'artisans' | 'verifications' | 'services' | 'requests' | 'reviews' | 'broadcast'
-  const [stats, setStats] = useState(null);
-  const [loadingStats, setLoadingStats] = useState(true);
+/* ── Small helpers ─────────────────────────────────────────────────────────── */
 
-  // Users State
-  const [users, setUsers] = useState([]);
-  const [userMeta, setUserMeta] = useState({ page: 1, total: 0, totalPages: 1 });
-  const [userPage, setUserPage] = useState(1);
-  const [userSearch, setUserSearch] = useState('');
-  const [userRoleFilter, setUserRoleFilter] = useState('ALL');
-  const [userStatusFilter, setUserStatusFilter] = useState('ALL');
-  const [selectedUserModal, setSelectedUserModal] = useState(null);
-  const [loadingUsers, setLoadingUsers] = useState(false);
+const personName = (u) => (u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() || '—' : '—');
 
-  // Artisans State
-  const [artisans, setArtisans] = useState([]);
-  const [artisanMeta, setArtisanMeta] = useState({ page: 1, total: 0, totalPages: 1 });
-  const [artisanPage, setArtisanPage] = useState(1);
-  const [artisanSearch, setArtisanSearch] = useState('');
-  const [artisanStatusFilter, setArtisanStatusFilter] = useState('ALL');
-  const [selectedArtisanModal, setSelectedArtisanModal] = useState(null);
-  const [loadingArtisans, setLoadingArtisans] = useState(false);
+const timeAgo = (value, lang) => {
+  const diff = (Date.now() - new Date(value).getTime()) / 1000;
+  const rtf = new Intl.RelativeTimeFormat(lang === 'fr' ? 'fr' : 'en', { numeric: 'auto', style: 'short' });
+  if (diff < 3600) return rtf.format(-Math.max(1, Math.round(diff / 60)), 'minute');
+  if (diff < 86400) return rtf.format(-Math.round(diff / 3600), 'hour');
+  return rtf.format(-Math.round(diff / 86400), 'day');
+};
 
-  // Verifications State
-  const [verifications, setVerifications] = useState([]);
-  const [selectedVerification, setSelectedVerification] = useState(null);
-  const [adminDecisionReason, setAdminDecisionReason] = useState('');
-  const [loadingVerifications, setLoadingVerifications] = useState(false);
+const REQUEST_STATUS = {
+  PENDING: ['En attente', 'Pending', 'amber'],
+  ACCEPTED: ['Acceptée', 'Accepted', 'blue'],
+  IN_PROGRESS: ['En cours', 'In progress', 'green'],
+  COMPLETED: ['Terminée', 'Completed', 'dark'],
+  CANCELLED: ['Annulée', 'Cancelled', 'grey'],
+  REJECTED: ['Refusée', 'Declined', 'grey'],
+};
 
-  // Services State
-  const [services, setServices] = useState([]);
-  const [serviceSearch, setServiceSearch] = useState('');
-  const [serviceStatusFilter, setServiceStatusFilter] = useState('ALL');
-  const [loadingServices, setLoadingServices] = useState(false);
+const VERIF_STATUS = {
+  verified: ['Vérifié', 'Verified', 'green'],
+  pending: ['En cours', 'In progress', 'amber'],
+  failed: ['Échoué', 'Failed', 'red'],
+  unverified: ['Non vérifié', 'Unverified', 'grey'],
+};
 
-  // Requests State
-  const [requests, setRequests] = useState([]);
-  const [requestStatusFilter, setRequestStatusFilter] = useState('ALL');
-  const [loadingRequests, setLoadingRequests] = useState(false);
+const PAYMENT_PILL = {
+  PENDING: 'amber', HELD: 'blue', PROCESSING: 'amber', SUCCESS: 'green',
+  FAILED: 'grey', CANCELLED: 'grey', PAYOUT_FAILED: 'red', REFUND_PENDING: 'red',
+};
 
-  // Reviews State
-  const [reviews, setReviews] = useState([]);
-  const [reviewRatingFilter, setReviewRatingFilter] = useState('ALL');
-  const [loadingReviews, setLoadingReviews] = useState(false);
+function Pill({ map, value, lang }) {
+  const [fr, en, cls] = map[value] || [value, value, 'grey'];
+  return <span className={`ad-pill ${cls}`}>{lang === 'fr' ? fr : en}</span>;
+}
 
-  // Broadcast State
-  const [broadcastTarget, setBroadcastTarget] = useState('ALL');
-  const [broadcastTitle, setBroadcastTitle] = useState('');
-  const [broadcastMessage, setBroadcastMessage] = useState('');
-  const [sendingBroadcast, setSendingBroadcast] = useState(false);
+/** Fetch a paginated admin list; re-runs when `params` change. */
+function useAdminList(path, params, enabled) {
+  const [state, setState] = useState({ rows: [], meta: { total: 0, page: 1, totalPages: 1 }, loading: false, error: '' });
+  const key = JSON.stringify(params);
 
-  const getAdminHeaders = () => {
-    const token = localStorage.getItem('skillora_admin_token') || localStorage.getItem('skillora_token');
-    return {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    };
-  };
-
-  // Security Check on Mount: Prevent direct URL or unauthorized access
-  useEffect(() => {
-    const adminToken = localStorage.getItem('skillora_admin_token') || localStorage.getItem('skillora_token');
-    if (!adminToken) {
-      if (triggerToast) {
-        triggerToast(
-          lang === 'fr'
-            ? 'Accès refusé. Privilèges et jeton d\'authentification administrateur requis.'
-            : 'Access Denied. Admin clearance & authentication token required.',
-          '⚠️'
-        );
-      }
-      if (onLogout) onLogout();
-    }
-  }, []);
-
-  // Resilient Mock Fallbacks for Dev and Offline Mode
-  const getFallbackStats = () => ({
-    totalUsers: 156,
-    totalClients: 98,
-    totalProfessionals: 58,
-    verifiedProfessionals: 42,
-    unverifiedProfessionals: 16,
-    pendingVerifications: 5,
-    activeUsers: 149,
-    suspendedUsers: 7,
-    totalServices: 89,
-    totalServiceRequests: 234,
-    completedMissions: 201,
-    cancelledMissions: 12,
-    totalReviews: 188,
-    averagePlatformRating: '4.85'
-  });
-
-  const getFallbackUsers = () => [
-    { id: 'usr-admin-1', firstName: 'Super', lastName: 'Admin', email: 'admin@skillora.cm', role: 'ADMIN', isActive: true, phone: '+237 600 00 00 00', location: 'Yaoundé (Centre)', createdAt: '2025-01-01' },
-    { id: 'usr-pro-1', firstName: 'Emmanuel', lastName: 'Ngu', email: 'emmanuel.pro@skillora.cm', role: 'PROFESSIONAL', isActive: true, phone: '+237 675 42 10 99', location: 'Yaoundé (Bastos)', createdAt: '2025-02-10' },
-    { id: 'usr-pro-2', firstName: 'Jean-Paul', lastName: 'Fomekong', email: 'jeanpaul.elec@skillora.cm', role: 'PROFESSIONAL', isActive: true, phone: '+237 677 34 56 78', location: 'Douala (Akwa)', createdAt: '2025-02-18' },
-    { id: 'usr-client-1', firstName: 'Alice', lastName: 'Smith', email: 'customer@skillora.cm', role: 'CUSTOMER', isActive: true, phone: '+237 699 88 77 66', location: 'Biyem-Assi, Yaoundé', createdAt: '2025-03-01' },
-    { id: 'usr-client-2', firstName: 'Valerie', lastName: 'Mbida', email: 'valerie.client@skillora.cm', role: 'CUSTOMER', isActive: true, phone: '+237 670 11 22 33', location: 'Bonapriso, Douala', createdAt: '2025-03-05' }
-  ];
-
-  const getFallbackArtisans = () => [
-    {
-      id: 'pro-1',
-      user: { firstName: 'Emmanuel', lastName: 'Ngu', email: 'emmanuel.pro@skillora.cm', phone: '+237 675 42 10 99', location: 'Yaoundé (Bastos)' },
-      category: { name: 'Électricité & Énergie' },
-      verificationStatus: 'verified',
-      yearsOfExperience: 8,
-      averageRating: 4.9,
-      totalReviews: 38,
-      completedJobs: 45,
-      bio: 'Maître électricien certifié et spécialiste des installations photovoltaïques.'
-    },
-    {
-      id: 'pro-2',
-      user: { firstName: 'Jean-Paul', lastName: 'Fomekong', email: 'jeanpaul.elec@skillora.cm', phone: '+237 677 34 56 78', location: 'Douala (Akwa)' },
-      category: { name: 'Plomberie & Sanitaire' },
-      verificationStatus: 'verified',
-      yearsOfExperience: 6,
-      averageRating: 4.8,
-      totalReviews: 29,
-      completedJobs: 33,
-      bio: 'Installation réseaux sanitaires, dépannage express et tuyauterie industrielle.'
-    },
-    {
-      id: 'pro-3',
-      user: { firstName: 'Serge', lastName: 'Kamdem', email: 'serge.kamdem@skillora.cm', phone: '+237 690 12 34 56', location: 'Yaoundé (Mvan)' },
-      category: { name: 'Menuiserie & Bois' },
-      verificationStatus: 'pending',
-      yearsOfExperience: 5,
-      averageRating: 4.7,
-      totalReviews: 14,
-      completedJobs: 18,
-      bio: 'Artisan ébéniste, agencement d’intérieur et meubles sur mesure.'
-    }
-  ];
-
-  const getFallbackVerifications = () => [
-    {
-      id: 'verif-1',
-      status: 'pending',
-      createdAt: '2025-03-14',
-      professional: {
-        user: { firstName: 'Serge', lastName: 'Kamdem', email: 'serge.kamdem@skillora.cm', phone: '+237 690 12 34 56', location: 'Yaoundé (Mvan)' },
-        category: { name: 'Menuiserie & Bois' }
-      },
-      quizScore: 85,
-      quizPassed: true,
-      aiAnalysis: {
-        authenticityScore: 92,
-        confidenceScore: 89,
-        documentAnalysis: 'CNI camerounaise authentique vérifiée. Diplôme CQP Menuiserie conforme.',
-        recommendation: 'APPROVE'
-      }
-    },
-    {
-      id: 'verif-2',
-      status: 'pending',
-      createdAt: '2025-03-15',
-      professional: {
-        user: { firstName: 'Boris', lastName: 'Tchinda', email: 'boris.t@skillora.cm', phone: '+237 671 22 33 44', location: 'Douala (Bonabéri)' },
-        category: { name: 'Maçonnerie & BTP' }
-      },
-      quizScore: 78,
-      quizPassed: true,
-      aiAnalysis: {
-        authenticityScore: 88,
-        confidenceScore: 84,
-        documentAnalysis: 'Attestation professionnelle du BTP et pièce d\'identité valides.',
-        recommendation: 'APPROVE'
-      }
-    }
-  ];
-
-  const getFallbackServices = () => [
-    {
-      id: 'srv-1',
-      title: 'Installation Électrique Complète Bâtiment',
-      category: { name: 'Électricité' },
-      professional: { user: { firstName: 'Emmanuel', lastName: 'Ngu' } },
-      basePrice: 75000,
-      pricingType: 'fixed',
-      isActive: true,
-      description: 'Câblage aux normes NFC 15-100, disjoncteurs différentiels et mise à la terre.'
-    },
-    {
-      id: 'srv-2',
-      title: 'Dépannage Plomberie Express',
-      category: { name: 'Plomberie' },
-      professional: { user: { firstName: 'Jean-Paul', lastName: 'Fomekong' } },
-      basePrice: 25000,
-      pricingType: 'hourly',
-      isActive: true,
-      description: 'Détection et réparation de fuites d\'eau, débouchage canalisation.'
-    }
-  ];
-
-  const getFallbackRequests = () => [
-    {
-      id: 'req-1',
-      title: 'Rénovation tableau électrique triphasé',
-      customer: { firstName: 'Alice', lastName: 'Smith', phone: '+237 699 88 77 66' },
-      professional: { user: { firstName: 'Emmanuel', lastName: 'Ngu' } },
-      status: 'IN_PROGRESS',
-      budget: 120000,
-      createdAt: '2025-03-12'
-    },
-    {
-      id: 'req-2',
-      title: 'Installation chauffe-eau solaire',
-      customer: { firstName: 'Valerie', lastName: 'Mbida', phone: '+237 670 11 22 33' },
-      professional: { user: { firstName: 'Jean-Paul', lastName: 'Fomekong' } },
-      status: 'COMPLETED',
-      budget: 85000,
-      createdAt: '2025-03-10'
-    }
-  ];
-
-  const getFallbackReviews = () => [
-    {
-      id: 'rev-1',
-      rating: 5,
-      comment: 'Travail impeccable et respect des délais. L\'installation électrique fonctionne à merveille.',
-      customer: { firstName: 'Alice', lastName: 'Smith' },
-      professional: { user: { firstName: 'Emmanuel', lastName: 'Ngu' } },
-      createdAt: '2025-03-11'
-    },
-    {
-      id: 'rev-2',
-      rating: 4.8,
-      comment: 'Très bon artisan plombier, disponible et professionnel.',
-      customer: { firstName: 'Valerie', lastName: 'Mbida' },
-      professional: { user: { firstName: 'Jean-Paul', lastName: 'Fomekong' } },
-      createdAt: '2025-03-09'
-    }
-  ];
-
-  // Fetch Dashboard Stats
-  const fetchStats = async () => {
-    setLoadingStats(true);
+  const load = useCallback(async () => {
+    if (!enabled) return;
+    setState((s) => ({ ...s, loading: true, error: '' }));
+    const qs = new URLSearchParams(
+      Object.entries(JSON.parse(key)).filter(([, v]) => v !== '' && v !== undefined && v !== null)
+    ).toString();
     try {
-      const res = await fetch('/api/admin/stats', { headers: getAdminHeaders() });
-      if (res.status === 401 || res.status === 403) {
-        const token = localStorage.getItem('skillora_admin_token') || localStorage.getItem('skillora_token');
-        if (token && (token.includes('offline') || token.includes('demo') || token.includes('secure'))) {
-          setStats(getFallbackStats());
-          return;
-        }
-        triggerToast(lang === 'fr' ? 'Session admin expirée ou non autorisée.' : 'Admin session expired or unauthorized.', '⚠️');
-        onLogout();
-        return;
-      }
-      const data = await res.json();
-      if (data.success && data.data) {
-        setStats(data.data);
-      } else {
-        setStats(getFallbackStats());
-      }
-    } catch (err) {
-      console.warn('Admin stats backend unavailable, loaded local fallback:', err);
-      setStats(getFallbackStats());
-    } finally {
-      setLoadingStats(false);
-    }
-  };
-
-  // Fetch Users
-  const fetchUsers = async () => {
-    setLoadingUsers(true);
-    try {
-      const qs = new URLSearchParams({
-        page: userPage,
-        limit: 15,
-        search: userSearch,
-        role: userRoleFilter,
-        status: userStatusFilter,
-      }).toString();
-      const res = await fetch(`/api/admin/users?${qs}`, { headers: getAdminHeaders() });
-      const data = await res.json();
-      if (data.success && data.data) {
-        setUsers(data.data || []);
-        setUserMeta(data.meta || { page: 1, total: data.data?.length || 0, totalPages: 1 });
-      } else {
-        const fallback = getFallbackUsers();
-        setUsers(fallback);
-        setUserMeta({ page: 1, total: fallback.length, totalPages: 1 });
-      }
-    } catch (err) {
-      console.warn('Error fetching users from backend, loaded local fallback:', err);
-      const fallback = getFallbackUsers();
-      setUsers(fallback);
-      setUserMeta({ page: 1, total: fallback.length, totalPages: 1 });
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
-
-  // Toggle User Status
-  const handleToggleUserStatus = async (userId) => {
-    try {
-      const res = await fetch(`/api/admin/users/${userId}/status`, {
-        method: 'PUT',
-        headers: getAdminHeaders(),
+      const res = await api(`${path}${qs ? `?${qs}` : ''}`);
+      const meta = res.meta || {};
+      const limit = meta.limit || 20;
+      setState({
+        rows: res.data || [],
+        meta: { total: meta.total ?? (res.data || []).length, page: meta.page || 1, totalPages: meta.totalPages || Math.max(1, Math.ceil((meta.total || 0) / limit)) },
+        loading: false,
+        error: '',
       });
-      const data = await res.json();
-      if (data.success) {
-        triggerToast(data.message, '✓');
-        fetchUsers();
-        fetchStats();
-      }
     } catch (err) {
-      triggerToast('Action failed', '⚠️');
+      setState((s) => ({ ...s, loading: false, error: err.message }));
     }
-  };
-
-  // Delete User Account
-  const handleDeleteUser = async (userId, email) => {
-    if (!window.confirm(lang === 'fr' ? `Supprimer définitivement le compte ${email} ?` : `Permanently delete account ${email}?`)) {
-      return;
-    }
-    try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
-        method: 'DELETE',
-        headers: getAdminHeaders(),
-      });
-      const data = await res.json();
-      if (data.success) {
-        triggerToast(data.message, '✓');
-        fetchUsers();
-        fetchStats();
-        if (selectedUserModal?.id === userId) setSelectedUserModal(null);
-      } else {
-        triggerToast(data.message || 'Cannot delete user', '⚠️');
-      }
-    } catch (err) {
-      triggerToast('Delete action failed', '⚠️');
-    }
-  };
-
-  // Fetch Artisans
-  const fetchArtisans = async () => {
-    setLoadingArtisans(true);
-    try {
-      const qs = new URLSearchParams({
-        page: artisanPage,
-        limit: 15,
-        search: artisanSearch,
-        verificationStatus: artisanStatusFilter,
-      }).toString();
-      const res = await fetch(`/api/admin/professionals?${qs}`, { headers: getAdminHeaders() });
-      const data = await res.json();
-      if (data.success && data.data) {
-        setArtisans(data.data || []);
-        setArtisanMeta(data.meta || { page: 1, total: data.data?.length || 0, totalPages: 1 });
-      } else {
-        const fallback = getFallbackArtisans();
-        setArtisans(fallback);
-        setArtisanMeta({ page: 1, total: fallback.length, totalPages: 1 });
-      }
-    } catch (err) {
-      console.warn('Error fetching artisans, loaded local fallback:', err);
-      const fallback = getFallbackArtisans();
-      setArtisans(fallback);
-      setArtisanMeta({ page: 1, total: fallback.length, totalPages: 1 });
-    } finally {
-      setLoadingArtisans(false);
-    }
-  };
-
-  // Fetch Verification Requests
-  const fetchVerifications = async () => {
-    setLoadingVerifications(true);
-    try {
-      const res = await fetch('/api/admin/verification-requests', { headers: getAdminHeaders() });
-      const data = await res.json();
-      if (data.success && data.data) {
-        setVerifications(data.data || []);
-      } else {
-        setVerifications(getFallbackVerifications());
-      }
-    } catch (err) {
-      console.warn('Error fetching verifications, loaded local fallback:', err);
-      setVerifications(getFallbackVerifications());
-    } finally {
-      setLoadingVerifications(false);
-    }
-  };
-
-  // Process Verification (Approve / Reject)
-  const handleProcessVerification = async (verificationId, action) => {
-    try {
-      const res = await fetch(`/api/admin/verification/${verificationId}`, {
-        method: 'PUT',
-        headers: getAdminHeaders(),
-        body: JSON.stringify({
-          action,
-          targetStatus: action === 'approve' ? 'verified' : 'failed',
-          reason: adminDecisionReason || (action === 'approve' ? 'Documents & AI validated' : 'Requirements not met'),
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        triggerToast(data.message, '🛡️');
-        setSelectedVerification(null);
-        setAdminDecisionReason('');
-        fetchVerifications();
-        fetchStats();
-        fetchArtisans();
-      } else {
-        triggerToast(data.message || 'Processing failed', '⚠️');
-      }
-    } catch (err) {
-      // Offline fallback: update locally
-      setVerifications((prev) =>
-        prev.map((v) =>
-          v.id === verificationId
-            ? { ...v, status: action === 'approve' ? 'verified' : 'failed' }
-            : v
-        )
-      );
-      setSelectedVerification(null);
-      setAdminDecisionReason('');
-      triggerToast(
-        lang === 'fr'
-          ? (action === 'approve' ? 'Artisan approuvé et vérifié avec succès !' : 'Dossier artisan rejeté.')
-          : (action === 'approve' ? 'Artisan successfully approved and verified!' : 'Artisan verification rejected.'),
-        '🛡️'
-      );
-    }
-  };
-
-  // Fetch Services
-  const fetchServices = async () => {
-    setLoadingServices(true);
-    try {
-      const qs = new URLSearchParams({
-        search: serviceSearch,
-        status: serviceStatusFilter,
-      }).toString();
-      const res = await fetch(`/api/admin/services?${qs}`, { headers: getAdminHeaders() });
-      const data = await res.json();
-      if (data.success && data.data) {
-        setServices(data.data || []);
-      } else {
-        setServices(getFallbackServices());
-      }
-    } catch (err) {
-      console.warn('Error fetching services, loaded local fallback:', err);
-      setServices(getFallbackServices());
-    } finally {
-      setLoadingServices(false);
-    }
-  };
-
-  // Toggle Service Status
-  const handleToggleService = async (serviceId) => {
-    try {
-      const res = await fetch(`/api/admin/services/${serviceId}/status`, {
-        method: 'PUT',
-        headers: getAdminHeaders(),
-      });
-      const data = await res.json();
-      if (data.success) {
-        triggerToast(data.message, '✓');
-        fetchServices();
-      }
-    } catch (err) {
-      setServices((prev) =>
-        prev.map((s) => (s.id === serviceId ? { ...s, isActive: !s.isActive } : s))
-      );
-      triggerToast(lang === 'fr' ? 'Statut du service mis à jour' : 'Service status updated', '✓');
-    }
-  };
-
-  // Delete Service
-  const handleDeleteService = async (serviceId) => {
-    if (!window.confirm(lang === 'fr' ? 'Supprimer définitivement ce service ?' : 'Permanently remove this service?')) {
-      return;
-    }
-    try {
-      const res = await fetch(`/api/admin/services/${serviceId}`, {
-        method: 'DELETE',
-        headers: getAdminHeaders(),
-      });
-      const data = await res.json();
-      if (data.success) {
-        triggerToast(data.message, '✓');
-        fetchServices();
-        fetchStats();
-      }
-    } catch (err) {
-      setServices((prev) => prev.filter((s) => s.id !== serviceId));
-      triggerToast(lang === 'fr' ? 'Service supprimé' : 'Service removed', '✓');
-    }
-  };
-
-  // Fetch Requests
-  const fetchRequests = async () => {
-    setLoadingRequests(true);
-    try {
-      const qs = new URLSearchParams({
-        status: requestStatusFilter,
-      }).toString();
-      const res = await fetch(`/api/admin/requests?${qs}`, { headers: getAdminHeaders() });
-      const data = await res.json();
-      if (data.success && data.data) {
-        setRequests(data.data || []);
-      } else {
-        setRequests(getFallbackRequests());
-      }
-    } catch (err) {
-      console.warn('Error fetching requests, loaded local fallback:', err);
-      setRequests(getFallbackRequests());
-    } finally {
-      setLoadingRequests(false);
-    }
-  };
-
-  // Fetch Reviews
-  const fetchReviews = async () => {
-    setLoadingReviews(true);
-    try {
-      let url = '/api/admin/reviews';
-      if (reviewRatingFilter !== 'ALL') {
-        url += `?minRating=${reviewRatingFilter}&maxRating=${reviewRatingFilter}`;
-      }
-      const res = await fetch(url, { headers: getAdminHeaders() });
-      const data = await res.json();
-      if (data.success && data.data) {
-        setReviews(data.data || []);
-      } else {
-        setReviews(getFallbackReviews());
-      }
-    } catch (err) {
-      console.warn('Error fetching reviews, loaded local fallback:', err);
-      setReviews(getFallbackReviews());
-    } finally {
-      setLoadingReviews(false);
-    }
-  };
-
-  // Delete Review
-  const handleDeleteReview = async (reviewId) => {
-    if (!window.confirm(lang === 'fr' ? 'Supprimer cet avis client ?' : 'Delete this user review?')) {
-      return;
-    }
-    try {
-      const res = await fetch(`/api/admin/reviews/${reviewId}`, {
-        method: 'DELETE',
-        headers: getAdminHeaders(),
-      });
-      const data = await res.json();
-      if (data.success) {
-        triggerToast(data.message, '✓');
-        fetchReviews();
-        fetchStats();
-      }
-    } catch (err) {
-      triggerToast('Delete failed', '⚠️');
-    }
-  };
-
-  // Send Broadcast
-  const handleSendBroadcast = async (e) => {
-    e.preventDefault();
-    if (!broadcastTitle || !broadcastMessage) return;
-    setSendingBroadcast(true);
-    try {
-      const res = await fetch('/api/admin/notifications/send', {
-        method: 'POST',
-        headers: getAdminHeaders(),
-        body: JSON.stringify({
-          targetRole: broadcastTarget,
-          title: broadcastTitle,
-          message: broadcastMessage,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        triggerToast(data.message, '📢');
-        setBroadcastTitle('');
-        setBroadcastMessage('');
-      } else {
-        triggerToast(data.message || 'Broadcast failed', '⚠️');
-      }
-    } catch (err) {
-      triggerToast('Error broadcasting message', '⚠️');
-    } finally {
-      setSendingBroadcast(false);
-    }
-  };
+  }, [path, key, enabled]);
 
   useEffect(() => {
-    fetchStats();
-  }, []);
+    load();
+  }, [load]);
 
-  useEffect(() => {
-    if (activeTab === 'users') fetchUsers();
-    if (activeTab === 'artisans') fetchArtisans();
-    if (activeTab === 'verifications') fetchVerifications();
-    if (activeTab === 'services') fetchServices();
-    if (activeTab === 'requests') fetchRequests();
-    if (activeTab === 'reviews') fetchReviews();
-  }, [activeTab, userPage, userRoleFilter, userStatusFilter, artisanPage, artisanStatusFilter, serviceStatusFilter, requestStatusFilter, reviewRatingFilter]);
+  return { ...state, reload: load };
+}
+
+/* ── Charts (inline SVG, no library) ───────────────────────────────────────── */
+
+function smoothPath(points) {
+  if (points.length < 2) return '';
+  let d = `M ${points[0][0]} ${points[0][1]}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const [x0, y0] = points[i - 1] || points[i];
+    const [x1, y1] = points[i];
+    const [x2, y2] = points[i + 1];
+    const [x3, y3] = points[i + 2] || points[i + 1];
+    const c1 = [x1 + (x2 - x0) / 6, y1 + (y2 - y0) / 6];
+    const c2 = [x2 - (x3 - x1) / 6, y2 - (y3 - y1) / 6];
+    d += ` C ${c1[0]} ${c1[1]}, ${c2[0]} ${c2[1]}, ${x2} ${y2}`;
+  }
+  return d;
+}
+
+function AreaChart({ labels, series, format = (v) => v }) {
+  const W = 620;
+  const H = 230;
+  const pad = { l: 44, r: 12, t: 14, b: 28 };
+  const max = Math.max(1, ...series.flatMap((s) => s.values));
+  const niceMax = Math.ceil(max / 4) * 4 || 4;
+  const x = (i) => pad.l + (i * (W - pad.l - pad.r)) / Math.max(1, labels.length - 1);
+  const y = (v) => pad.t + (1 - v / niceMax) * (H - pad.t - pad.b);
 
   return (
-    <div className="admin-console-wrapper" style={{ padding: '1.5rem', maxWidth: '1440px', margin: '0 auto', color: '#e8edf5' }}>
-      {/* TOP BAR */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', background: 'rgba(15, 23, 42, 0.75)', border: '1px solid rgba(255, 183, 0, 0.25)', borderRadius: '14px', padding: '1rem 1.5rem', backdropFilter: 'blur(12px)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ fontSize: '1.8rem', background: 'rgba(255, 183, 0, 0.15)', border: '1px solid #ffb700', borderRadius: '10px', width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            🛡️
-          </div>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '1.25rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              Skillora Super Admin Console
-              <span style={{ fontSize: '0.65rem', background: '#ffb700', color: '#000', padding: '2px 8px', borderRadius: '20px', fontWeight: '800' }}>MASTER CLEARANCE</span>
-            </h2>
-            <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
-              {lang === 'fr' ? 'Supervision de la base MongoDB, modération du marketplace & validation IA' : 'Live MongoDB supervision, marketplace moderation & AI verification control'}
-            </p>
-          </div>
-        </div>
+    <svg className="ad-chart" viewBox={`0 0 ${W} ${H}`} role="img" preserveAspectRatio="none">
+      <defs>
+        {series.map((s) => (
+          <linearGradient key={s.id} id={`ad-grad-${s.id}`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={s.color} stopOpacity="0.35" />
+            <stop offset="100%" stopColor={s.color} stopOpacity="0" />
+          </linearGradient>
+        ))}
+      </defs>
+      {[0, 1, 2, 3, 4].map((i) => {
+        const v = (niceMax / 4) * i;
+        return (
+          <g key={i}>
+            <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} className="ad-chart-grid" />
+            <text x={pad.l - 8} y={y(v) + 4} textAnchor="end" className="ad-chart-axis">{format(v)}</text>
+          </g>
+        );
+      })}
+      {labels.map((l, i) => (
+        <text key={l + i} x={x(i)} y={H - 6} textAnchor="middle" className="ad-chart-axis">{l}</text>
+      ))}
+      {series.map((s) => {
+        const pts = s.values.map((v, i) => [x(i), y(v)]);
+        const line = smoothPath(pts);
+        return (
+          <g key={s.id}>
+            <path d={`${line} L ${x(pts.length - 1)} ${y(0)} L ${x(0)} ${y(0)} Z`} fill={`url(#ad-grad-${s.id})`} />
+            <path d={line} fill="none" stroke={s.color} strokeWidth="2.5" strokeLinecap="round" />
+            {pts.map(([px, py], i) => (
+              <circle key={i} cx={px} cy={py} r="3.5" fill="#fff" stroke={s.color} strokeWidth="2">
+                <title>{`${labels[i]} : ${format(s.values[i])}`}</title>
+              </circle>
+            ))}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
 
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <button
-            onClick={() => { fetchStats(); if (activeTab === 'users') fetchUsers(); if (activeTab === 'verifications') fetchVerifications(); }}
-            className="btn-outline"
-            style={{ fontSize: '0.8rem', padding: '0.45rem 0.9rem', borderColor: 'rgba(255, 183, 0, 0.4)' }}
-            title="Refresh All Real-Time Data"
-          >
-            🔄 {lang === 'fr' ? 'Actualiser' : 'Refresh'}
-          </button>
-          <button
-            onClick={onBackToMarketplace}
-            className="btn-outline"
-            style={{ fontSize: '0.8rem', padding: '0.45rem 0.9rem' }}
-          >
-            🏬 {lang === 'fr' ? 'Vue Marché' : 'Marketplace'}
-          </button>
-          <button
-            onClick={onLogout}
-            className="btn-outline"
-            style={{ fontSize: '0.8rem', padding: '0.45rem 0.9rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
-          >
-            🚪 {lang === 'fr' ? 'Déconnexion Admin' : 'Admin Logout'}
-          </button>
+function Donut({ parts }) {
+  const total = parts.reduce((s, p) => s + p.value, 0);
+  const R = 70;
+  const C = 2 * Math.PI * R;
+  let offset = 0;
+  return (
+    <svg className="ad-donut" viewBox="0 0 200 200" role="img">
+      <circle cx="100" cy="100" r={R} className="ad-donut-track" />
+      {total > 0 &&
+        parts.map((p) => {
+          const len = (p.value / total) * C;
+          const el = (
+            <circle
+              key={p.label}
+              cx="100"
+              cy="100"
+              r={R}
+              fill="none"
+              stroke={p.color}
+              strokeWidth="26"
+              strokeDasharray={`${len} ${C - len}`}
+              strokeDashoffset={-offset}
+              transform="rotate(-90 100 100)"
+            >
+              <title>{`${p.label}: ${p.value}`}</title>
+            </circle>
+          );
+          offset += len;
+          return el;
+        })}
+      <text x="100" y="96" textAnchor="middle" className="ad-donut-total">{total}</text>
+      <text x="100" y="118" textAnchor="middle" className="ad-donut-label">comptes</text>
+    </svg>
+  );
+}
+
+function MiniBars({ values }) {
+  const max = Math.max(1, ...values);
+  return (
+    <div className="ad-minibars" aria-hidden="true">
+      {values.map((v, i) => <span key={i} style={{ height: `${Math.max(10, (v / max) * 100)}%` }} />)}
+    </div>
+  );
+}
+
+function Wave() {
+  return (
+    <svg className="ad-wave" viewBox="0 0 200 60" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 40 C 30 10, 50 55, 80 30 S 130 5, 160 30 S 190 50, 200 20 L 200 60 L 0 60 Z" />
+    </svg>
+  );
+}
+
+/* ── Main component ───────────────────────────────────────────────────────── */
+
+export default function AdminDashboard({ onLogout, onBackToMarketplace, triggerToast, lang = 'fr', setLang, theme, setTheme, currentUser }) {
+  const tr = (fr, en) => (lang === 'fr' ? fr : en);
+  const [tab, setTab] = useState('overview');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [topSearch, setTopSearch] = useState('');
+
+  // Overview data
+  const [overview, setOverview] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [overviewError, setOverviewError] = useState('');
+  const [chartMode, setChartMode] = useState('missions');
+
+  // List filters
+  const [userQ, setUserQ] = useState({ page: 1, search: '', role: 'ALL', status: 'ALL' });
+  const [artisanQ, setArtisanQ] = useState({ page: 1, search: '', verificationStatus: 'ALL' });
+  const [verifQ, setVerifQ] = useState({ status: 'REVIEW' });
+  const [paymentQ, setPaymentQ] = useState({ page: 1, status: 'ALL' });
+  const [requestQ, setRequestQ] = useState({ page: 1, status: 'ALL' });
+  const [serviceQ, setServiceQ] = useState({ page: 1, search: '', status: 'ALL' });
+  const [reviewQ, setReviewQ] = useState({ page: 1, band: 'ALL' });
+
+  const users = useAdminList('/admin/users', userQ, tab === 'users');
+  const artisans = useAdminList('/admin/professionals', artisanQ, tab === 'artisans');
+  const verifications = useAdminList('/admin/verification-requests', verifQ, tab === 'verifications' || tab === 'overview');
+  const payments = useAdminList('/admin/payments', paymentQ, tab === 'payments');
+  const requests = useAdminList('/admin/requests', tab === 'overview' ? { page: 1, limit: 6 } : requestQ, tab === 'requests' || tab === 'overview');
+  const services = useAdminList('/admin/services', serviceQ, tab === 'services');
+  const reviewParams = useMemo(() => {
+    const bands = { LOW: { maxRating: 2 }, MID: { minRating: 3, maxRating: 3 }, HIGH: { minRating: 4 } };
+    return { page: reviewQ.page, ...(bands[reviewQ.band] || {}) };
+  }, [reviewQ]);
+  const reviews = useAdminList('/admin/reviews', reviewParams, tab === 'reviews');
+
+  // Dialogs
+  const [detail, setDetail] = useState(null); // { kind: 'user'|'artisan', data }
+  const [reviewing, setReviewing] = useState(null); // verification being decided
+  const [decisionReason, setDecisionReason] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // Broadcast
+  const [broadcast, setBroadcast] = useState({ targetRole: 'ALL', title: '', message: '' });
+
+  const loadOverview = useCallback(async () => {
+    setOverviewError('');
+    try {
+      const [o, s] = await Promise.all([api('/admin/overview'), api('/admin/stats')]);
+      setOverview(o.data);
+      setStats(s.data);
+    } catch (err) {
+      setOverviewError(err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadOverview();
+  }, [loadOverview]);
+
+  const refreshAll = () => {
+    loadOverview();
+    ({ users, artisans, verifications, payments, requests, services, reviews })[tab]?.reload?.();
+    triggerToast?.(tr('Données actualisées', 'Data refreshed'), '🔄');
+  };
+
+  const go = (id) => {
+    setTab(id);
+    setMenuOpen(false);
+    document.querySelector('.ad-content')?.scrollTo?.({ top: 0 });
+  };
+
+  /* ── Actions ── */
+  const run = async (fn, successMsg, after) => {
+    setBusy(true);
+    try {
+      const res = await fn();
+      triggerToast?.(successMsg || res?.message || tr('Fait', 'Done'), '✓');
+      after?.();
+      loadOverview();
+    } catch (err) {
+      triggerToast?.(err.message, '⚠️');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleUser = (u) =>
+    run(() => api(`/admin/users/${u._id}/status`, { method: 'PUT' }),
+      u.isActive ? tr('Compte suspendu', 'Account suspended') : tr('Compte réactivé', 'Account reactivated'), users.reload);
+
+  const deleteUser = (u) => {
+    if (!window.confirm(tr(`Supprimer définitivement le compte ${u.email} ?`, `Permanently delete ${u.email}?`))) return;
+    run(() => api(`/admin/users/${u._id}`, { method: 'DELETE' }), tr('Compte supprimé', 'Account deleted'), users.reload);
+  };
+
+  const decideVerification = (action) =>
+    run(
+      () => api(`/admin/verification/${reviewing._id}`, { method: 'PUT', body: { action, reason: decisionReason.trim() || undefined } }),
+      action === 'approve' ? tr('Artisan vérifié ✓', 'Artisan verified ✓') : tr('Vérification refusée', 'Verification rejected'),
+      () => { setReviewing(null); setDecisionReason(''); verifications.reload(); }
+    );
+
+  const toggleService = (s) => run(() => api(`/admin/services/${s._id}/status`, { method: 'PUT' }), null, services.reload);
+
+  const deleteService = (s) => {
+    if (!window.confirm(tr(`Supprimer le service « ${s.title} » ?`, `Delete service "${s.title}"?`))) return;
+    run(() => api(`/admin/services/${s._id}`, { method: 'DELETE' }), tr('Service supprimé', 'Service deleted'), services.reload);
+  };
+
+  const deleteReview = (r) => {
+    if (!window.confirm(tr('Supprimer cet avis ? La note de l’artisan sera recalculée.', "Delete this review? The artisan's rating will be recalculated."))) return;
+    run(() => api(`/admin/reviews/${r._id}`, { method: 'DELETE' }), tr('Avis supprimé', 'Review deleted'), reviews.reload);
+  };
+
+  const sendBroadcast = (e) => {
+    e.preventDefault();
+    run(() => api('/admin/notifications/send', { method: 'POST', body: broadcast }), null, () => setBroadcast((b) => ({ ...b, title: '', message: '' })));
+  };
+
+  /* ── Navigation ── */
+  const reviewCount = tab === 'overview' || tab === 'verifications' ? (verifQ.status === 'REVIEW' ? verifications.rows.length : null) : null;
+  const NAV = [
+    { id: 'overview', icon: '▦', label: tr('Tableau de bord', 'Dashboard') },
+    { id: 'users', icon: '👥', label: tr('Utilisateurs', 'Users') },
+    { id: 'artisans', icon: '🧑‍🔧', label: tr('Artisans', 'Artisans') },
+    { id: 'verifications', icon: '🛡️', label: tr('Vérifications', 'Verifications'), badge: reviewCount || null },
+    { id: 'payments', icon: '💳', label: tr('Paiements', 'Payments'), badge: overview?.money?.needsAttention || null, danger: true },
+    { id: 'requests', icon: '📋', label: tr('Missions', 'Jobs') },
+    { id: 'services', icon: '💼', label: tr('Services', 'Services') },
+    { id: 'reviews', icon: '⭐', label: tr('Avis', 'Reviews') },
+    { id: 'broadcast', icon: '📣', label: tr('Diffusion', 'Broadcast') },
+  ];
+  const current = NAV.find((n) => n.id === tab);
+
+  const monthLabels = (overview?.months || []).map((m) =>
+    new Date(m.year, m.month - 1, 1).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-GB', { month: 'short' }).replace('.', '')
+  );
+
+  const chartSeries = {
+    missions: [
+      { id: 'req', label: tr('Demandes', 'Requests'), color: 'var(--ad-c1)', values: overview?.series.requests || [] },
+      { id: 'done', label: tr('Terminées', 'Completed'), color: 'var(--ad-c3)', values: overview?.series.completed || [] },
+    ],
+    payments: [{ id: 'pay', label: tr('Volume (FCFA)', 'Volume (FCFA)'), color: 'var(--ad-c1)', values: overview?.series.paymentVolume || [] }],
+    signups: [
+      { id: 'cli', label: tr('Clients', 'Clients'), color: 'var(--ad-c1)', values: overview?.series.clients || [] },
+      { id: 'art', label: tr('Artisans', 'Artisans'), color: 'var(--ad-c3)', values: overview?.series.artisans || [] },
+    ],
+  }[chartMode];
+
+  const compact = (v) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `${Math.round(v / 1e3)}k` : Math.round(v));
+
+  /* ── Reusable table pieces ── */
+  const pager = (list, onPage) =>
+    list.meta.totalPages > 1 ? (
+      <div className="ad-pager">
+        <span>{tr(`${list.meta.total} résultat(s)`, `${list.meta.total} result(s)`)}</span>
+        <div>
+          <button type="button" disabled={list.meta.page <= 1} onClick={() => onPage(list.meta.page - 1)}>‹</button>
+          {Array.from({ length: Math.min(list.meta.totalPages, 7) }, (_, i) => i + 1).map((p) => (
+            <button key={p} type="button" className={p === list.meta.page ? 'active' : ''} onClick={() => onPage(p)}>{p}</button>
+          ))}
+          <button type="button" disabled={list.meta.page >= list.meta.totalPages} onClick={() => onPage(list.meta.page + 1)}>›</button>
         </div>
       </div>
+    ) : (
+      <div className="ad-pager"><span>{tr(`${list.meta.total} résultat(s)`, `${list.meta.total} result(s)`)}</span></div>
+    );
+  const tableState = (list, cols, empty) =>
+    list.loading ? (
+      <tr><td colSpan={cols} className="ad-empty">{tr('Chargement…', 'Loading…')}</td></tr>
+    ) : list.error ? (
+      <tr><td colSpan={cols} className="ad-empty error">⚠️ {list.error} <button type="button" className="ad-link" onClick={list.reload}>{tr('Réessayer', 'Retry')}</button></td></tr>
+    ) : list.rows.length === 0 ? (
+      <tr><td colSpan={cols} className="ad-empty">{empty}</td></tr>
+    ) : null;
 
-      {/* DASHBOARD LAYOUT: SIDEBAR + CONTENT */}
-      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: '1.5rem', minHeight: '680px' }}>
-        {/* SIDEBAR NAVIGATION */}
-        <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '14px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', height: 'fit-content' }}>
-          {[
-            { id: 'overview', icon: '📊', label: lang === 'fr' ? 'Vue Générale & Stats' : 'Overview & Stats' },
-            { id: 'users', icon: '👥', label: lang === 'fr' ? 'Utilisateurs & Rôles' : 'Users Management' },
-            { id: 'artisans', icon: '🧑‍🔧', label: lang === 'fr' ? 'Artisans & Pros' : 'Artisans / Pros' },
-            { id: 'verifications', icon: '🛡️', label: lang === 'fr' ? 'Vérifications IA' : 'Verification Queue', badge: stats?.pendingVerifications || null },
-            { id: 'services', icon: '💼', label: lang === 'fr' ? 'Services & Offres' : 'Services Catalog' },
-            { id: 'requests', icon: '📋', label: lang === 'fr' ? 'Missions & Demandes' : 'Service Requests' },
-            { id: 'reviews', icon: '⭐', label: lang === 'fr' ? 'Avis & Modération' : 'Reviews Moderation' },
-            { id: 'broadcast', icon: '🔔', label: lang === 'fr' ? 'Diffusion Système' : 'Broadcast / Alerts' },
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.75rem 1rem',
-                borderRadius: '8px',
-                border: activeTab === item.id ? '1px solid rgba(255, 183, 0, 0.5)' : '1px solid transparent',
-                background: activeTab === item.id ? 'rgba(255, 183, 0, 0.12)' : 'transparent',
-                color: activeTab === item.id ? '#ffb700' : '#cbd5e1',
-                fontWeight: activeTab === item.id ? '700' : '500',
-                cursor: 'pointer',
-                textAlign: 'left',
-                fontSize: '0.88rem',
-                transition: 'all 0.2s ease',
-              }}
-            >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <span>{item.icon}</span>
-                <span>{item.label}</span>
-              </span>
-              {item.badge ? (
-                <span style={{ background: '#ef4444', color: '#fff', fontSize: '0.7rem', padding: '1px 6px', borderRadius: '10px', fontWeight: 'bold' }}>
-                  {item.badge}
-                </span>
-              ) : null}
+  const adminName = currentUser?.name || tr('Administrateur', 'Administrator');
+
+  return (
+    <div className={`ad-layout ${menuOpen ? 'menu-open' : ''}`}>
+      {/* ── SIDEBAR ─────────────────────────────────────────── */}
+      <aside className="ad-sidebar" aria-label={tr('Navigation admin', 'Admin navigation')}>
+        <div className="ad-brand">
+          <span className="ad-brand-mark" aria-hidden="true"><span /><span /><span /></span>
+          <div>
+            <strong>Skillora</strong>
+            <small>{tr('Administration', 'Administration')}</small>
+          </div>
+        </div>
+        <nav className="ad-nav">
+          {NAV.map((n) => (
+            <button key={n.id} type="button" className={`ad-nav-item ${tab === n.id ? 'active' : ''}`} onClick={() => go(n.id)} aria-current={tab === n.id ? 'page' : undefined}>
+              <span className="ad-nav-icon">{n.icon}</span>
+              <span>{n.label}</span>
+              {n.badge ? <span className={`ad-nav-badge ${n.danger ? 'danger' : ''}`}>{n.badge}</span> : null}
             </button>
           ))}
+        </nav>
+        <div className="ad-sidebar-foot">
+          <button type="button" className="ad-nav-item" onClick={onBackToMarketplace}>
+            <span className="ad-nav-icon">🏠</span>
+            <span>{tr('Voir le site', 'View site')}</span>
+          </button>
+          <button type="button" className="ad-nav-item logout" onClick={onLogout}>
+            <span className="ad-nav-icon">↪</span>
+            <span>{tr('Déconnexion', 'Log out')}</span>
+          </button>
         </div>
+      </aside>
+      {menuOpen && <div className="ad-scrim" onClick={() => setMenuOpen(false)} />}
 
-        {/* MAIN PANEL CONTENT */}
-        <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '14px', padding: '1.5rem', minHeight: '600px' }}>
-          {/* TAB 1: OVERVIEW & PLATFORM STATS */}
-          {activeTab === 'overview' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                <h3 style={{ margin: 0, color: '#fff', fontSize: '1.15rem' }}>
-                  {lang === 'fr' ? 'Indicateurs en Temps Réel de la Plateforme (MongoDB)' : 'Platform Real-Time Metrics (MongoDB)'}
-                </h3>
-                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Base: <code>skillora</code></span>
+      <div className="ad-main">
+        {/* ── TOP BAR ───────────────────────────────────────── */}
+        <header className="ad-topbar">
+          <button type="button" className="ad-icon-btn ad-burger" onClick={() => setMenuOpen(true)} aria-label={tr('Menu', 'Menu')}>☰</button>
+          <form
+            className="ad-search"
+            role="search"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setUserQ((q) => ({ ...q, page: 1, search: topSearch.trim() }));
+              go('users');
+            }}
+          >
+            <span aria-hidden="true">🔍</span>
+            <input value={topSearch} onChange={(e) => setTopSearch(e.target.value)} placeholder={tr('Rechercher un utilisateur (nom, e-mail, téléphone)…', 'Search a user (name, email, phone)…')} aria-label={tr('Rechercher', 'Search')} />
+          </form>
+          <div className="ad-top-actions">
+            <button type="button" className="ad-icon-btn" onClick={refreshAll} title={tr('Actualiser', 'Refresh')} aria-label={tr('Actualiser', 'Refresh')}>🔄</button>
+            {setTheme && (
+              <button type="button" className="ad-icon-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label={tr('Thème', 'Theme')}>{theme === 'dark' ? '☀️' : '🌙'}</button>
+            )}
+            {setLang && (
+              <button type="button" className="ad-icon-btn ad-lang" onClick={() => setLang(lang === 'fr' ? 'en' : 'fr')}>{lang === 'fr' ? 'EN' : 'FR'}</button>
+            )}
+            <div className="ad-me">
+              <img src={avatarFor(adminName)} alt="" />
+              <div>
+                <strong>{adminName}</strong>
+                <small>{currentUser?.email}</small>
               </div>
-
-              {loadingStats ? (
-                <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>⏳ {lang === 'fr' ? 'Chargement des métriques MongoDB...' : 'Loading MongoDB stats...'}</div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
-                  {[
-                    { label: lang === 'fr' ? 'Utilisateurs Totaux' : 'Total Users', val: stats?.totalUsers ?? 0, icon: '👥', color: '#38bdf8' },
-                    { label: lang === 'fr' ? 'Clients Inscrits' : 'Total Clients', val: stats?.totalClients ?? 0, icon: '👤', color: '#60a5fa' },
-                    { label: lang === 'fr' ? 'Artisans / Pros' : 'Total Artisans', val: stats?.totalProfessionals ?? 0, icon: '🧑‍🔧', color: '#34d399' },
-                    { label: lang === 'fr' ? 'Artisans Vérifiés (✓)' : 'Verified Artisans', val: stats?.verifiedProfessionals ?? 0, icon: '🛡️', color: '#10b981' },
-                    { label: lang === 'fr' ? 'Artisans Non-Vérifiés' : 'Unverified Artisans', val: stats?.unverifiedProfessionals ?? 0, icon: '○', color: '#94a3b8' },
-                    { label: lang === 'fr' ? 'Demandes en Attente' : 'Pending Verifications', val: stats?.pendingVerifications ?? 0, icon: '⏳', color: '#f59e0b' },
-                    { label: lang === 'fr' ? 'Comptes Actifs' : 'Active Users', val: stats?.activeUsers ?? 0, icon: '🟢', color: '#22c55e' },
-                    { label: lang === 'fr' ? 'Comptes Suspendus' : 'Suspended Users', val: stats?.suspendedUsers ?? 0, icon: '🔴', color: '#ef4444' },
-                    { label: lang === 'fr' ? 'Services Publiés' : 'Active Services', val: stats?.totalServices ?? 0, icon: '💼', color: '#a78bfa' },
-                    { label: lang === 'fr' ? 'Demandes de Mission' : 'Service Requests', val: stats?.totalServiceRequests ?? 0, icon: '📋', color: '#f472b6' },
-                    { label: lang === 'fr' ? 'Missions Complétées' : 'Completed Jobs', val: stats?.completedMissions ?? 0, icon: '✅', color: '#2dd4bf' },
-                    { label: lang === 'fr' ? 'Missions Annulées' : 'Cancelled Jobs', val: stats?.cancelledMissions ?? 0, icon: '❌', color: '#f87171' },
-                    { label: lang === 'fr' ? 'Avis Clients' : 'Total Reviews', val: stats?.totalReviews ?? 0, icon: '⭐', color: '#fbbf24' },
-                    { label: lang === 'fr' ? 'Note Moyenne Globale' : 'Platform Avg Rating', val: `${stats?.averagePlatformRating ?? '0.0'} / 5.0`, icon: '💎', color: '#e879f9' },
-                  ].map((card, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        background: 'rgba(30, 41, 59, 0.6)',
-                        border: `1px solid rgba(255, 255, 255, 0.08)`,
-                        borderTop: `3px solid ${card.color}`,
-                        borderRadius: '10px',
-                        padding: '1rem',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                        <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: '500' }}>{card.label}</span>
-                        <span style={{ fontSize: '1.2rem' }}>{card.icon}</span>
-                      </div>
-                      <div style={{ fontSize: '1.4rem', fontWeight: '800', color: card.color }}>
-                        {card.val}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 2: USERS MANAGEMENT */}
-          {activeTab === 'users' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-                <h3 style={{ margin: 0, color: '#fff', fontSize: '1.15rem' }}>
-                  {lang === 'fr' ? 'Gestion des Utilisateurs' : 'User Accounts Directory'} ({userMeta.total})
-                </h3>
-
-                {/* FILTERS */}
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    placeholder={lang === 'fr' ? 'Rechercher nom, email, téléphone...' : 'Search name, email, phone...'}
-                    value={userSearch}
-                    onChange={(e) => { setUserSearch(e.target.value); setUserPage(1); }}
-                    onKeyDown={(e) => e.key === 'Enter' && fetchUsers()}
-                    style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255, 255, 255, 0.15)', color: '#fff', padding: '0.45rem 0.75rem', borderRadius: '6px', fontSize: '0.82rem', width: '220px' }}
-                  />
-                  <select
-                    value={userRoleFilter}
-                    onChange={(e) => { setUserRoleFilter(e.target.value); setUserPage(1); }}
-                    style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255, 255, 255, 0.15)', color: '#fff', padding: '0.45rem 0.6rem', borderRadius: '6px', fontSize: '0.82rem' }}
-                  >
-                    <option value="ALL">{lang === 'fr' ? 'Tous Rôles' : 'All Roles'}</option>
-                    <option value="CUSTOMER">Client</option>
-                    <option value="PROFESSIONAL">Artisan / Pro</option>
-                    <option value="ADMIN">Super Admin</option>
-                  </select>
-                  <select
-                    value={userStatusFilter}
-                    onChange={(e) => { setUserStatusFilter(e.target.value); setUserPage(1); }}
-                    style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255, 255, 255, 0.15)', color: '#fff', padding: '0.45rem 0.6rem', borderRadius: '6px', fontSize: '0.82rem' }}
-                  >
-                    <option value="ALL">{lang === 'fr' ? 'Tous Statuts' : 'All Status'}</option>
-                    <option value="active">{lang === 'fr' ? 'Actif' : 'Active'}</option>
-                    <option value="inactive">{lang === 'fr' ? 'Suspendu' : 'Suspended'}</option>
-                  </select>
-                </div>
-              </div>
-
-              {loadingUsers ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>⏳ {lang === 'fr' ? 'Chargement...' : 'Loading users...'}</div>
-              ) : users.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>∅ {lang === 'fr' ? 'Aucun utilisateur trouvé.' : 'No users found matching query.'}</div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                    <thead>
-                      <tr style={{ background: 'rgba(30, 41, 59, 0.7)', color: '#94a3b8', textAlign: 'left', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                        <th style={{ padding: '0.75rem' }}>Utilisateur</th>
-                        <th style={{ padding: '0.75rem' }}>Email</th>
-                        <th style={{ padding: '0.75rem' }}>Téléphone</th>
-                        <th style={{ padding: '0.75rem' }}>Rôle</th>
-                        <th style={{ padding: '0.75rem' }}>Statut</th>
-                        <th style={{ padding: '0.75rem' }}>Inscription</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.map((u) => (
-                        <tr key={u.id || u._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                          <td style={{ padding: '0.65rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', overflow: 'hidden' }}>
-                              {u.profileImage ? <img src={u.profileImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '👤'}
-                            </div>
-                            <span style={{ fontWeight: '600', color: '#fff' }}>{u.firstName} {u.lastName}</span>
-                          </td>
-                          <td style={{ padding: '0.65rem 0.75rem', color: '#cbd5e1' }}>{u.email}</td>
-                          <td style={{ padding: '0.65rem 0.75rem', color: '#94a3b8' }}>{u.phone || '—'}</td>
-                          <td style={{ padding: '0.65rem 0.75rem' }}>
-                            <span style={{
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '0.72rem',
-                              fontWeight: '600',
-                              background: u.role === 'ADMIN' ? 'rgba(255, 183, 0, 0.2)' : u.role === 'PROFESSIONAL' ? 'rgba(52, 211, 153, 0.2)' : 'rgba(96, 165, 250, 0.2)',
-                              color: u.role === 'ADMIN' ? '#ffb700' : u.role === 'PROFESSIONAL' ? '#34d399' : '#60a5fa',
-                            }}>
-                              {u.role}
-                            </span>
-                          </td>
-                          <td style={{ padding: '0.65rem 0.75rem' }}>
-                            <span style={{
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '0.72rem',
-                              fontWeight: '600',
-                              background: u.isActive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                              color: u.isActive ? '#22c55e' : '#ef4444',
-                            }}>
-                              {u.isActive ? (lang === 'fr' ? 'Actif' : 'Active') : (lang === 'fr' ? 'Suspendu' : 'Suspended')}
-                            </span>
-                          </td>
-                          <td style={{ padding: '0.65rem 0.75rem', color: '#94a3b8' }}>
-                            {new Date(u.createdAt).toLocaleDateString()}
-                          </td>
-                          <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>
-                            <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
-                              <button
-                                onClick={() => setSelectedUserModal(u)}
-                                style={{ background: 'rgba(255, 255, 255, 0.1)', border: 'none', color: '#fff', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.72rem' }}
-                                title="View details"
-                              >
-                                🔍 Détails
-                              </button>
-                              <button
-                                onClick={() => handleToggleUserStatus(u.id || u._id)}
-                                style={{
-                                  background: u.isActive ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)',
-                                  border: 'none',
-                                  color: u.isActive ? '#f87171' : '#4ade80',
-                                  padding: '3px 8px',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer',
-                                  fontSize: '0.72rem',
-                                }}
-                              >
-                                {u.isActive ? (lang === 'fr' ? 'Suspendre' : 'Suspend') : (lang === 'fr' ? 'Activer' : 'Activate')}
-                              </button>
-                              {u.role !== 'ADMIN' && (
-                                <button
-                                  onClick={() => handleDeleteUser(u.id || u._id, u.email)}
-                                  style={{ background: 'rgba(239, 68, 68, 0.2)', border: 'none', color: '#f87171', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.72rem' }}
-                                  title="Delete User"
-                                >
-                                  🗑️
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-
-                  {/* PAGINATION */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                    <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-                      Page {userMeta.page} / {userMeta.totalPages} ({userMeta.total} {lang === 'fr' ? 'utilisateurs' : 'users'})
-                    </span>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button
-                        disabled={userPage <= 1}
-                        onClick={() => setUserPage((p) => Math.max(1, p - 1))}
-                        className="btn-outline"
-                        style={{ padding: '2px 8px', fontSize: '0.75rem' }}
-                      >
-                        ← {lang === 'fr' ? 'Précédent' : 'Prev'}
-                      </button>
-                      <button
-                        disabled={userPage >= userMeta.totalPages}
-                        onClick={() => setUserPage((p) => p + 1)}
-                        className="btn-outline"
-                        style={{ padding: '2px 8px', fontSize: '0.75rem' }}
-                      >
-                        {lang === 'fr' ? 'Suivant' : 'Next'} →
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: ARTISANS / PROFESSIONALS */}
-          {activeTab === 'artisans' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-                <h3 style={{ margin: 0, color: '#fff', fontSize: '1.15rem' }}>
-                  {lang === 'fr' ? 'Répertoire des Artisans & Spécialistes' : 'Artisans & Professionals Directory'} ({artisanMeta.total})
-                </h3>
-
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    placeholder={lang === 'fr' ? 'Métier, nom, spécialité...' : 'Search trade, name...'}
-                    value={artisanSearch}
-                    onChange={(e) => { setArtisanSearch(e.target.value); setArtisanPage(1); }}
-                    onKeyDown={(e) => e.key === 'Enter' && fetchArtisans()}
-                    style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255, 255, 255, 0.15)', color: '#fff', padding: '0.45rem 0.75rem', borderRadius: '6px', fontSize: '0.82rem', width: '220px' }}
-                  />
-                  <select
-                    value={artisanStatusFilter}
-                    onChange={(e) => { setArtisanStatusFilter(e.target.value); setArtisanPage(1); }}
-                    style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255, 255, 255, 0.15)', color: '#fff', padding: '0.45rem 0.6rem', borderRadius: '6px', fontSize: '0.82rem' }}
-                  >
-                    <option value="ALL">{lang === 'fr' ? 'Tous Statuts Vérif.' : 'All Verif. Status'}</option>
-                    <option value="verified">{lang === 'fr' ? 'Vérifié (✓)' : 'Verified (✓)'}</option>
-                    <option value="unverified">{lang === 'fr' ? 'Non Vérifié' : 'Unverified'}</option>
-                    <option value="pending">{lang === 'fr' ? 'En Attente' : 'Pending'}</option>
-                    <option value="failed">{lang === 'fr' ? 'Rejeté' : 'Failed'}</option>
-                  </select>
-                </div>
-              </div>
-
-              {loadingArtisans ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>⏳ {lang === 'fr' ? 'Chargement...' : 'Loading artisans...'}</div>
-              ) : artisans.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>∅ {lang === 'fr' ? 'Aucun artisan trouvé.' : 'No artisans found.'}</div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                    <thead>
-                      <tr style={{ background: 'rgba(30, 41, 59, 0.7)', color: '#94a3b8', textAlign: 'left', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                        <th style={{ padding: '0.75rem' }}>Artisan / Pro</th>
-                        <th style={{ padding: '0.75rem' }}>Métier</th>
-                        <th style={{ padding: '0.75rem' }}>Localisation</th>
-                        <th style={{ padding: '0.75rem' }}>Note & Missions</th>
-                        <th style={{ padding: '0.75rem' }}>Vérification</th>
-                        <th style={{ padding: '0.75rem' }}>Compte</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {artisans.map((pro) => (
-                        <tr key={pro.id || pro._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                          <td style={{ padding: '0.65rem 0.75rem' }}>
-                            <div style={{ fontWeight: '600', color: '#fff' }}>
-                              {pro.userId ? `${pro.userId.firstName} ${pro.userId.lastName}` : (pro.groupName || 'Artisan')}
-                            </div>
-                            <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{pro.userId?.email || '—'}</div>
-                          </td>
-                          <td style={{ padding: '0.65rem 0.75rem', color: '#38bdf8' }}>{pro.profession}</td>
-                          <td style={{ padding: '0.65rem 0.75rem', color: '#cbd5e1' }}>{pro.userId?.location || 'Cameroun'}</td>
-                          <td style={{ padding: '0.65rem 0.75rem' }}>
-                            ⭐ <strong>{pro.rating || '0.0'}</strong> ({pro.completedMissions || 0} missions)
-                          </td>
-                          <td style={{ padding: '0.65rem 0.75rem' }}>
-                            <span style={{
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '0.72rem',
-                              fontWeight: '600',
-                              background: pro.verifiedBadge ? 'rgba(34, 197, 94, 0.2)' : pro.verificationStatus === 'pending' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(148, 163, 184, 0.15)',
-                              color: pro.verifiedBadge ? '#22c55e' : pro.verificationStatus === 'pending' ? '#f59e0b' : '#94a3b8',
-                            }}>
-                              {pro.verifiedBadge ? '✓ VÉRIFIÉ' : pro.verificationStatus === 'pending' ? '⏳ EN ATTENTE' : '○ NON VÉRIFIÉ'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '0.65rem 0.75rem' }}>
-                            <span style={{ color: pro.userId?.isActive !== false ? '#22c55e' : '#ef4444', fontSize: '0.75rem' }}>
-                              {pro.userId?.isActive !== false ? '● Actif' : '● Suspendu'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>
-                            <button
-                              onClick={() => setSelectedArtisanModal(pro)}
-                              style={{ background: 'rgba(255, 255, 255, 0.1)', border: 'none', color: '#fff', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
-                            >
-                              🔍 Dossier Complet
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 4: VERIFICATION REQUESTS */}
-          {activeTab === 'verifications' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0, color: '#fff', fontSize: '1.15rem' }}>
-                  {lang === 'fr' ? 'Demandes de Vérification & Décisions Administrateur' : 'Verification Sessions & Admin Decisions'}
-                </h3>
-                <span style={{ fontSize: '0.8rem', color: '#f59e0b' }}>
-                  * La vérification est optionnelle pour les artisans.
-                </span>
-              </div>
-
-              {loadingVerifications ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>⏳ {lang === 'fr' ? 'Chargement des sessions de vérification...' : 'Loading verification queue...'}</div>
-              ) : verifications.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
-                  ✓ {lang === 'fr' ? 'Aucune demande de vérification en attente.' : 'No verification requests in queue.'}
-                </div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                    <thead>
-                      <tr style={{ background: 'rgba(30, 41, 59, 0.7)', color: '#94a3b8', textAlign: 'left', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                        <th style={{ padding: '0.75rem' }}>Artisan</th>
-                        <th style={{ padding: '0.75rem' }}>Métier</th>
-                        <th style={{ padding: '0.75rem' }}>Statut</th>
-                        <th style={{ padding: '0.75rem' }}>Scores IA</th>
-                        <th style={{ padding: '0.75rem' }}>Date Soumission</th>
-                        <th style={{ padding: '0.75rem' }}>Décision</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>Arbitrage Admin</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {verifications.map((v) => {
-                        const art = v.artisanId;
-                        const user = art?.userId;
-                        return (
-                          <tr key={v.id || v._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                            <td style={{ padding: '0.65rem 0.75rem' }}>
-                              <div style={{ fontWeight: '600', color: '#fff' }}>
-                                {user ? `${user.firstName} ${user.lastName}` : 'Artisan'}
-                              </div>
-                              <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{user?.email || '—'}</div>
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#38bdf8' }}>{art?.profession || '—'}</td>
-                            <td style={{ padding: '0.65rem 0.75rem' }}>
-                              <span style={{
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                fontSize: '0.72rem',
-                                fontWeight: '600',
-                                background: v.status === 'verified' ? 'rgba(34, 197, 94, 0.2)' : v.status === 'failed' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                                color: v.status === 'verified' ? '#22c55e' : v.status === 'failed' ? '#ef4444' : '#f59e0b',
-                              }}>
-                                {v.status.toUpperCase()}
-                              </span>
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.75rem', color: '#cbd5e1' }}>
-                              <div>Tech: <strong>{v.technicalAssessmentScore || 0}%</strong> | Doc: <strong>{v.documentConsistencyScore || 0}%</strong></div>
-                              <div>Profil: <strong>{v.profileCompletenessScore || 0}%</strong> | Vidéo: {v.videoVerified ? '✓ Oui' : 'Non'}</div>
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#94a3b8' }}>
-                              {new Date(v.startedAt || v.createdAt).toLocaleDateString()}
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#cbd5e1', fontSize: '0.75rem' }}>
-                              {v.adminDecision || 'En attente de revue'}
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>
-                              <button
-                                onClick={() => setSelectedVerification(v)}
-                                style={{ background: '#ffb700', color: '#000', border: 'none', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}
-                              >
-                                Décision Admin →
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 5: SERVICES */}
-          {activeTab === 'services' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-                <h3 style={{ margin: 0, color: '#fff', fontSize: '1.15rem' }}>
-                  {lang === 'fr' ? 'Offres de Services Déposées' : 'Services Catalog'} ({services.length})
-                </h3>
-
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    placeholder={lang === 'fr' ? 'Titre, description...' : 'Search service...'}
-                    value={serviceSearch}
-                    onChange={(e) => setServiceSearch(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && fetchServices()}
-                    style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255, 255, 255, 0.15)', color: '#fff', padding: '0.45rem 0.75rem', borderRadius: '6px', fontSize: '0.82rem', width: '220px' }}
-                  />
-                  <select
-                    value={serviceStatusFilter}
-                    onChange={(e) => setServiceStatusFilter(e.target.value)}
-                    style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255, 255, 255, 0.15)', color: '#fff', padding: '0.45rem 0.6rem', borderRadius: '6px', fontSize: '0.82rem' }}
-                  >
-                    <option value="ALL">{lang === 'fr' ? 'Tous Statuts' : 'All Status'}</option>
-                    <option value="ACTIVE">{lang === 'fr' ? 'Actif' : 'Active'}</option>
-                    <option value="INACTIVE">{lang === 'fr' ? 'Inactif' : 'Inactive'}</option>
-                  </select>
-                </div>
-              </div>
-
-              {loadingServices ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>⏳ {lang === 'fr' ? 'Chargement...' : 'Loading services...'}</div>
-              ) : services.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>∅ {lang === 'fr' ? 'Aucun service répertorié.' : 'No services found.'}</div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                    <thead>
-                      <tr style={{ background: 'rgba(30, 41, 59, 0.7)', color: '#94a3b8', textAlign: 'left', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                        <th style={{ padding: '0.75rem' }}>Service</th>
-                        <th style={{ padding: '0.75rem' }}>Artisan Pro</th>
-                        <th style={{ padding: '0.75rem' }}>Catégorie</th>
-                        <th style={{ padding: '0.75rem' }}>Tarif (FCFA)</th>
-                        <th style={{ padding: '0.75rem' }}>Statut</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {services.map((s) => {
-                        const proUser = s.professionalId?.userId;
-                        return (
-                          <tr key={s.id || s._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                            <td style={{ padding: '0.65rem 0.75rem' }}>
-                              <div style={{ fontWeight: '600', color: '#fff' }}>{s.title}</div>
-                              <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{s.location || 'Douala/Yaoundé'}</div>
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#cbd5e1' }}>
-                              {proUser ? `${proUser.firstName} ${proUser.lastName}` : 'Artisan'}
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#38bdf8' }}>
-                              {s.categoryId?.name || 'Général'}
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', fontWeight: '700', color: '#34d399' }}>
-                              {Number(s.price || 0).toLocaleString()} FCFA
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem' }}>
-                              <span style={{
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                fontSize: '0.72rem',
-                                fontWeight: '600',
-                                background: s.status === 'ACTIVE' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                                color: s.status === 'ACTIVE' ? '#22c55e' : '#ef4444',
-                              }}>
-                                {s.status}
-                              </span>
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>
-                              <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
-                                <button
-                                  onClick={() => handleToggleService(s.id || s._id)}
-                                  style={{
-                                    background: s.status === 'ACTIVE' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)',
-                                    border: 'none',
-                                    color: s.status === 'ACTIVE' ? '#f87171' : '#4ade80',
-                                    padding: '3px 8px',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontSize: '0.72rem',
-                                  }}
-                                >
-                                  {s.status === 'ACTIVE' ? 'Désactiver' : 'Activer'}
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteService(s.id || s._id)}
-                                  style={{ background: 'rgba(239, 68, 68, 0.2)', border: 'none', color: '#f87171', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.72rem' }}
-                                >
-                                  🗑️
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 6: SERVICE REQUESTS */}
-          {activeTab === 'requests' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0, color: '#fff', fontSize: '1.15rem' }}>
-                  {lang === 'fr' ? 'Demandes de Réservation & Missions' : 'Service Booking Requests'} ({requests.length})
-                </h3>
-
-                <select
-                  value={requestStatusFilter}
-                  onChange={(e) => setRequestStatusFilter(e.target.value)}
-                  style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255, 255, 255, 0.15)', color: '#fff', padding: '0.45rem 0.75rem', borderRadius: '6px', fontSize: '0.82rem' }}
-                >
-                  <option value="ALL">{lang === 'fr' ? 'Tous Statuts' : 'All Status'}</option>
-                  <option value="PENDING">PENDING</option>
-                  <option value="ACCEPTED">ACCEPTED</option>
-                  <option value="IN_PROGRESS">IN_PROGRESS</option>
-                  <option value="COMPLETED">COMPLETED</option>
-                  <option value="REJECTED">REJECTED</option>
-                  <option value="CANCELLED">CANCELLED</option>
-                </select>
-              </div>
-
-              {loadingRequests ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>⏳ {lang === 'fr' ? 'Chargement...' : 'Loading requests...'}</div>
-              ) : requests.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>∅ {lang === 'fr' ? 'Aucune demande enregistrée.' : 'No service requests found.'}</div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                    <thead>
-                      <tr style={{ background: 'rgba(30, 41, 59, 0.7)', color: '#94a3b8', textAlign: 'left', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                        <th style={{ padding: '0.75rem' }}>Client Demandeur</th>
-                        <th style={{ padding: '0.75rem' }}>Artisan Assigné</th>
-                        <th style={{ padding: '0.75rem' }}>Description & Lieu</th>
-                        <th style={{ padding: '0.75rem' }}>Date Prévue</th>
-                        <th style={{ padding: '0.75rem' }}>Statut</th>
-                        <th style={{ padding: '0.75rem' }}>Date Création</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {requests.map((r) => {
-                        const cust = r.customerId;
-                        const profUser = r.professionalId?.userId;
-                        return (
-                          <tr key={r.id || r._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#fff', fontWeight: '600' }}>
-                              {cust ? `${cust.firstName} ${cust.lastName}` : 'Client'}
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#38bdf8' }}>
-                              {profUser ? `${profUser.firstName} ${profUser.lastName}` : 'Artisan'}
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#cbd5e1' }}>
-                              <div>{r.description}</div>
-                              <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>📍 {r.location || 'Yaoundé'}</div>
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#94a3b8' }}>
-                              {r.scheduledDate ? new Date(r.scheduledDate).toLocaleDateString() : 'Dès que possible'}
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem' }}>
-                              <span style={{
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                fontSize: '0.72rem',
-                                fontWeight: '700',
-                                background: r.status === 'COMPLETED' ? 'rgba(34, 197, 94, 0.2)' : r.status === 'CANCELLED' || r.status === 'REJECTED' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.2)',
-                                color: r.status === 'COMPLETED' ? '#22c55e' : r.status === 'CANCELLED' || r.status === 'REJECTED' ? '#ef4444' : '#38bdf8',
-                              }}>
-                                {r.status}
-                              </span>
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#94a3b8' }}>
-                              {new Date(r.createdAt).toLocaleDateString()}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 7: REVIEWS MODERATION */}
-          {activeTab === 'reviews' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0, color: '#fff', fontSize: '1.15rem' }}>
-                  {lang === 'fr' ? 'Modération des Avis & Évaluations' : 'Reviews Moderation'} ({reviews.length})
-                </h3>
-
-                <select
-                  value={reviewRatingFilter}
-                  onChange={(e) => setReviewRatingFilter(e.target.value)}
-                  style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255, 255, 255, 0.15)', color: '#fff', padding: '0.45rem 0.75rem', borderRadius: '6px', fontSize: '0.82rem' }}
-                >
-                  <option value="ALL">{lang === 'fr' ? 'Toutes Notes' : 'All Ratings'}</option>
-                  <option value="5">⭐⭐⭐⭐⭐ (5)</option>
-                  <option value="4">⭐⭐⭐⭐ (4)</option>
-                  <option value="3">⭐⭐⭐ (3)</option>
-                  <option value="2">⭐⭐ (2)</option>
-                  <option value="1">⭐ (1)</option>
-                </select>
-              </div>
-
-              {loadingReviews ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>⏳ {lang === 'fr' ? 'Chargement...' : 'Loading reviews...'}</div>
-              ) : reviews.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>∅ {lang === 'fr' ? 'Aucun avis trouvé.' : 'No reviews recorded.'}</div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                    <thead>
-                      <tr style={{ background: 'rgba(30, 41, 59, 0.7)', color: '#94a3b8', textAlign: 'left', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                        <th style={{ padding: '0.75rem' }}>Client</th>
-                        <th style={{ padding: '0.75rem' }}>Artisan Noté</th>
-                        <th style={{ padding: '0.75rem' }}>Note</th>
-                        <th style={{ padding: '0.75rem' }}>Commentaire</th>
-                        <th style={{ padding: '0.75rem' }}>Date</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>Modération</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reviews.map((rev) => {
-                        const cust = rev.customerId;
-                        const proUser = rev.professionalId?.userId;
-                        return (
-                          <tr key={rev.id || rev._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#fff', fontWeight: '600' }}>
-                              {cust ? `${cust.firstName} ${cust.lastName}` : 'Client'}
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#38bdf8' }}>
-                              {proUser ? `${proUser.firstName} ${proUser.lastName}` : 'Artisan'}
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#fbbf24', fontWeight: '700' }}>
-                              ⭐ {rev.rating} / 5
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#cbd5e1', maxWidth: '300px' }}>
-                              {rev.comment || '—'}
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', color: '#94a3b8' }}>
-                              {new Date(rev.createdAt).toLocaleDateString()}
-                            </td>
-                            <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>
-                              <button
-                                onClick={() => handleDeleteReview(rev.id || rev._id)}
-                                style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', border: 'none', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.72rem' }}
-                                title="Delete Inappropriate Review"
-                              >
-                                🗑️ Retirer
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 8: BROADCAST NOTIFICATIONS */}
-          {activeTab === 'broadcast' && (
-            <div style={{ maxWidth: '600px' }}>
-              <h3 style={{ margin: '0 0 0.4rem 0', color: '#fff', fontSize: '1.15rem' }}>
-                {lang === 'fr' ? 'Diffusion de Notification Plateforme' : 'Broadcast System Notification'}
-              </h3>
-              <p style={{ margin: '0 0 1.25rem 0', fontSize: '0.82rem', color: '#94a3b8' }}>
-                {lang === 'fr' ? 'Envoyez une alerte générale ou ciblée à tous les utilisateurs enregistrés.' : 'Send a system-wide broadcast notification to Skillora participants.'}
-              </p>
-
-              <form onSubmit={handleSendBroadcast}>
-                <div className="field">
-                  <label className="field-label">{lang === 'fr' ? 'Destinataires Cibles' : 'Target Audience'}</label>
-                  <select
-                    value={broadcastTarget}
-                    onChange={(e) => setBroadcastTarget(e.target.value)}
-                    className="input-field"
-                    style={{ background: 'rgba(15, 23, 42, 0.8)' }}
-                  >
-                    <option value="ALL">{lang === 'fr' ? '📢 Tous les Utilisateurs (Clients & Artisans)' : '📢 All Registered Users'}</option>
-                    <option value="CUSTOMER">{lang === 'fr' ? '👤 Clients Uniquement' : '👤 Clients Only'}</option>
-                    <option value="PROFESSIONAL">{lang === 'fr' ? '🧑‍🔧 Artisans & Professionnels Uniquement' : '🧑‍🔧 Artisans & Professionals Only'}</option>
-                  </select>
-                </div>
-
-                <div className="field">
-                  <label className="field-label">{lang === 'fr' ? 'Titre de l\'Alerte' : 'Announcement Title'}</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    placeholder={lang === 'fr' ? 'ex: Maintenance planifiée ou Nouveautés de sécurité' : 'e.g. Scheduled Maintenance or Feature Release'}
-                    value={broadcastTitle}
-                    onChange={(e) => setBroadcastTitle(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="field">
-                  <label className="field-label">{lang === 'fr' ? 'Message de l\'Annonce' : 'Message Body'}</label>
-                  <textarea
-                    className="input-field"
-                    rows={4}
-                    placeholder={lang === 'fr' ? 'Détails du message pour la communauté Skillora...' : 'Broadcast details...'}
-                    value={broadcastMessage}
-                    onChange={(e) => setBroadcastMessage(e.target.value)}
-                    required
-                    style={{ resize: 'vertical' }}
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="submit-btn"
-                  style={{ background: 'linear-gradient(135deg, #ffb700, #d48800)', color: '#000', fontWeight: '700' }}
-                  disabled={sendingBroadcast}
-                >
-                  {sendingBroadcast ? (lang === 'fr' ? 'Envoi en cours...' : 'Sending broadcast...') : (lang === 'fr' ? 'Diffuser l\'Alerte Immédiatement 📢' : 'Broadcast Message Immediately 📢')}
-                </button>
-              </form>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* USER DETAILS MODAL */}
-      {selectedUserModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-          <div style={{ background: '#0f172a', border: '1px solid #ffb700', borderRadius: '14px', width: '100%', maxWidth: '500px', padding: '1.5rem', color: '#fff' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, color: '#ffb700' }}>👤 {lang === 'fr' ? 'Détails Utilisateur' : 'User Details'}</h3>
-              <button onClick={() => setSelectedUserModal(null)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
-            </div>
-            <div style={{ fontSize: '0.88rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-              <div><strong>Nom complet :</strong> {selectedUserModal.firstName} {selectedUserModal.lastName}</div>
-              <div><strong>Email :</strong> {selectedUserModal.email}</div>
-              <div><strong>Téléphone :</strong> {selectedUserModal.phone || 'Non renseigné'}</div>
-              <div><strong>Rôle :</strong> {selectedUserModal.role}</div>
-              <div><strong>Localisation :</strong> {selectedUserModal.location || 'Cameroun'}</div>
-              <div><strong>Statut Compte :</strong> {selectedUserModal.isActive ? '🟢 Actif' : '🔴 Suspendu'}</div>
-              <div><strong>Date Création :</strong> {new Date(selectedUserModal.createdAt).toLocaleString()}</div>
-              {selectedUserModal.professionalProfile && (
-                <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: 'rgba(52, 211, 153, 0.1)', border: '1px solid #34d399', borderRadius: '8px' }}>
-                  <div style={{ fontWeight: '700', color: '#34d399', marginBottom: '0.3rem' }}>🧑‍🔧 Profil Professionnel Lié :</div>
-                  <div>Métier : {selectedUserModal.professionalProfile.profession}</div>
-                  <div>Badge : {selectedUserModal.professionalProfile.verifiedBadge ? '✓ Vérifié' : '○ Non-Vérifié'}</div>
-                  <div>Note : ⭐ {selectedUserModal.professionalProfile.rating || '0.0'}</div>
-                </div>
-              )}
-            </div>
-            <div style={{ marginTop: '1.25rem', textAlign: 'right' }}>
-              <button onClick={() => setSelectedUserModal(null)} className="btn-outline" style={{ padding: '0.4rem 1rem' }}>
-                Fermer
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        </header>
 
-      {/* VERIFICATION DECISION MODAL WITH FULL AUDIT VAULT */}
-      {selectedVerification && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-          <div style={{ background: '#0f172a', border: '1px solid #ffb700', borderRadius: '16px', width: '100%', maxWidth: '780px', padding: '1.5rem', color: '#fff', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.8)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(255,183,0,0.3)', paddingBottom: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <span style={{ fontSize: '1.4rem' }}>🛡️</span>
-                <div>
-                  <h3 style={{ margin: 0, color: '#ffb700', fontSize: '1.15rem' }}>
-                    {lang === 'fr' ? 'Dossier de Vérification & Examen IA' : 'Artisan Full Verification Vault'}
-                  </h3>
-                  <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                    {selectedVerification.artisanId?.userId ? `${selectedVerification.artisanId.userId.firstName} ${selectedVerification.artisanId.userId.lastName}` : 'Artisan'} • {selectedVerification.artisanId?.profession || 'Spécialiste'}
-                  </span>
-                </div>
-              </div>
-              <button onClick={() => setSelectedVerification(null)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: '1.2rem', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer' }}>✕</button>
-            </div>
-
-            {/* General Score Summary Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
-              <div style={{ background: 'rgba(255, 183, 0, 0.08)', border: '1px solid rgba(255, 183, 0, 0.3)', padding: '0.65rem', borderRadius: '8px', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.72rem', color: '#ffb700', display: 'block' }}>Score QCM Technique</span>
-                <strong style={{ fontSize: '1.2rem', color: '#fff' }}>{selectedVerification.mcqScore || selectedVerification.technicalAssessmentScore || 85}%</strong>
-              </div>
-              <div style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '0.65rem', borderRadius: '8px', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.72rem', color: '#38bdf8', display: 'block' }}>Cohérence Documents</span>
-                <strong style={{ fontSize: '1.2rem', color: '#fff' }}>{selectedVerification.documentConsistencyScore || 92}%</strong>
-              </div>
-              <div style={{ background: 'rgba(52, 211, 153, 0.08)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '0.65rem', borderRadius: '8px', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.72rem', color: '#34d399', display: 'block' }}>Complétude Profil</span>
-                <strong style={{ fontSize: '1.2rem', color: '#fff' }}>{selectedVerification.profileCompletenessScore || 90}%</strong>
-              </div>
-              <div style={{ background: 'rgba(168, 85, 247, 0.08)', border: '1px solid rgba(168, 85, 247, 0.3)', padding: '0.65rem', borderRadius: '8px', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.72rem', color: '#c084fc', display: 'block' }}>Enregistrement Vidéo</span>
-                <strong style={{ fontSize: '1.2rem', color: '#fff' }}>{selectedVerification.videoUrl ? '✓ Reçu' : 'Non'}</strong>
-              </div>
-            </div>
-
-            {/* SECTION 1: VIDEO RECORDING PLAYER */}
-            <div style={{ marginBottom: '1.25rem', background: 'rgba(15, 23, 42, 0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-              <h4 style={{ margin: '0 0 0.6rem 0', color: '#38bdf8', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                🎥 {lang === 'fr' ? 'Enregistrement Vidéo de Présentation de l\'Artisan' : 'Artisan Introduction Video Recording'}
-              </h4>
-              {selectedVerification.videoUrl ? (
-                <div>
-                  <video
-                    controls
-                    src={selectedVerification.videoUrl}
-                    style={{ width: '100%', maxHeight: '240px', borderRadius: '8px', background: '#000', objectFit: 'contain' }}
-                  >
-                    Your browser does not support video streaming.
-                  </video>
-                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
-                    🔗 Direct Video Stream Link: <a href={selectedVerification.videoUrl} target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>{selectedVerification.videoUrl}</a>
-                  </span>
-                </div>
-              ) : (
-                <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', color: '#94a3b8', fontSize: '0.82rem' }}>
-                  ℹ️ Aucun fichier vidéo directement enregistré pour cette session.
-                </div>
-              )}
-            </div>
-
-            {/* SECTION 2: UPLOADED VERIFICATION DOCUMENTS */}
-            <div style={{ marginBottom: '1.25rem', background: 'rgba(15, 23, 42, 0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-              <h4 style={{ margin: '0 0 0.6rem 0', color: '#34d399', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                📑 {lang === 'fr' ? 'Pièces Justificatives & Documents d\'Identité Téléversés' : 'Uploaded Verification Documents & Identity Vault'}
-              </h4>
-              {selectedVerification.documents && selectedVerification.documents.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.6rem' }}>
-                  {selectedVerification.documents.map((doc, idx) => (
-                    <div key={doc.id || idx} style={{ background: 'rgba(255,255,255,0.04)', padding: '0.65rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', fontSize: '0.78rem' }}>
-                      <div style={{ fontWeight: '700', color: '#ffb700' }}>📄 {doc.documentType || 'DOCUMENT'}</div>
-                      <div style={{ color: '#cbd5e1', margin: '3px 0' }}>Score IA : <strong>{doc.aiResult?.consistencyScore || 90}%</strong></div>
-                      <a href={doc.fileUrl || '#'} target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>
-                        Consulter le document ↗
-                      </a>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.6rem' }}>
-                  <div style={{ background: 'rgba(255,255,255,0.04)', padding: '0.65rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', fontSize: '0.78rem' }}>
-                    <div style={{ fontWeight: '700', color: '#ffb700' }}>🪪 carte_identite_nationale_cni.pdf</div>
-                    <div style={{ color: '#cbd5e1', margin: '3px 0' }}>Score IA Authentacité : <strong>95%</strong></div>
-                    <span style={{ color: '#34d399' }}>✓ Document Officiel Conforme</span>
-                  </div>
-                  <div style={{ background: 'rgba(255,255,255,0.04)', padding: '0.65rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', fontSize: '0.78rem' }}>
-                    <div style={{ fontWeight: '700', color: '#ffb700' }}>📜 attestation_diplome_technique_cqp.pdf</div>
-                    <div style={{ color: '#cbd5e1', margin: '3px 0' }}>Score IA Régularité : <strong>92%</strong></div>
-                    <span style={{ color: '#34d399' }}>✓ Certification Qualifiée</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* SECTION 3: MCQ ASSESSMENT QUIZ RESULTS */}
-            <div style={{ marginBottom: '1.25rem', background: 'rgba(15, 23, 42, 0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-              <h4 style={{ margin: '0 0 0.6rem 0', color: '#fbbf24', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                📝 {lang === 'fr' ? 'Résultats du Test d\'Évaluation Technique (QCM / MCQ)' : 'MCQ Technical Quiz Assessment Results'}
-              </h4>
-              {selectedVerification.mcqAnswers && selectedVerification.mcqAnswers.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                  {selectedVerification.mcqAnswers.map((ans, idx) => (
-                    <div key={idx} style={{ background: 'rgba(255,255,255,0.03)', padding: '0.65rem', borderRadius: '8px', borderLeft: '3px solid #fbbf24', fontSize: '0.78rem' }}>
-                      <div style={{ fontWeight: '700', color: '#fff' }}>Q{idx + 1}: {ans.questionId?.question || 'Question technique de spécialité'}</div>
-                      <div style={{ color: '#34d399', margin: '3px 0' }}>Réponse sélectionnée : <em>"{ans.answer}"</em></div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Évaluation IA : Score {ans.aiScore || 90}% • {ans.aiFeedback || 'Excellente réponse conforme.'}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', fontSize: '0.78rem' }}>
-                  <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.65rem', borderRadius: '8px', borderLeft: '3px solid #34d399' }}>
-                    <div style={{ fontWeight: '700', color: '#fff' }}>Q1: Protocoles de sécurité et normes de conformité sur chantier</div>
-                    <div style={{ color: '#34d399', margin: '3px 0' }}>Réponse du candidat : <em>"Consigne d'isolement, port des EPI complets et vérification d'absence de tension"</em></div>
-                    <div style={{ color: '#94a3b8' }}>Résultat QCM : <strong>95/100 (REUSSITE ✓)</strong></div>
-                  </div>
-                  <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.65rem', borderRadius: '8px', borderLeft: '3px solid #34d399' }}>
-                    <div style={{ fontWeight: '700', color: '#fff' }}>Q2: Diagnostic d'avaries complexes et procédures de dépannage</div>
-                    <div style={{ color: '#34d399', margin: '3px 0' }}>Réponse du candidat : <em>"Analyse méthodique avec appareil de mesure certifié et remplacement des composants selon schéma"</em></div>
-                    <div style={{ color: '#94a3b8' }}>Résultat QCM : <strong>90/100 (REUSSITE ✓)</strong></div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* DECISION FORM */}
-            <div className="field">
-              <label className="field-label">{lang === 'fr' ? 'Motif / Justification de la décision Administrateur' : 'Decision Reasoning Notes'}</label>
-              <textarea
-                className="input-field"
-                rows={2}
-                placeholder={lang === 'fr' ? 'Indiquez la raison de validation ou de rejet...' : 'Reasoning for approval or rejection...'}
-                value={adminDecisionReason}
-                onChange={(e) => setAdminDecisionReason(e.target.value)}
-                style={{ resize: 'vertical' }}
-              />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1.25rem' }}>
-              <button
-                onClick={() => handleProcessVerification(selectedVerification.id || selectedVerification._id, 'reject')}
-                style={{ background: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', color: '#f87171', padding: '0.65rem', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
-              >
-                ✕ {lang === 'fr' ? 'Rejeter la Vérification' : 'Reject Verification'}
-              </button>
-              <button
-                onClick={() => handleProcessVerification(selectedVerification.id || selectedVerification._id, 'approve')}
-                style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', color: '#fff', padding: '0.65rem', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
-              >
-                ✓ {lang === 'fr' ? 'Approuver (Attribuer Badge ✓)' : 'Approve (Award Badge ✓)'}
-              </button>
+        <main className="ad-content">
+          <div className="ad-page-head">
+            <div>
+              <h1>{current?.label}</h1>
+              <p>{tr('Skillora · console d’administration', 'Skillora · admin console')}</p>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* ARTISAN DOSSIER MODAL */}
-      {selectedArtisanModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-          <div style={{ background: '#0f172a', border: '1px solid #38bdf8', borderRadius: '14px', width: '100%', maxWidth: '580px', padding: '1.5rem', color: '#fff', maxHeight: '85vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, color: '#38bdf8' }}>🧑‍🔧 {lang === 'fr' ? 'Dossier Professionnel Complet' : 'Complete Artisan Dossier'}</h3>
-              <button onClick={() => setSelectedArtisanModal(null)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
-            </div>
-            <div style={{ fontSize: '0.88rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-              <div><strong>Nom :</strong> {selectedArtisanModal.userId ? `${selectedArtisanModal.userId.firstName} ${selectedArtisanModal.userId.lastName}` : selectedArtisanModal.groupName}</div>
-              <div><strong>Email :</strong> {selectedArtisanModal.userId?.email || '—'}</div>
-              <div><strong>Profession :</strong> {selectedArtisanModal.profession}</div>
-              <div><strong>Expérience :</strong> {selectedArtisanModal.experience} ans</div>
-              <div><strong>Bio :</strong> {selectedArtisanModal.bio || 'Aucune biographie fournie.'}</div>
-              <div><strong>Compétences :</strong> {Array.isArray(selectedArtisanModal.skills) ? selectedArtisanModal.skills.join(', ') : '—'}</div>
-              <div><strong>Badge de Vérification :</strong> {selectedArtisanModal.verifiedBadge ? '✓ Vérifié' : '○ Non-Vérifié'}</div>
-              <div><strong>Score de Vérification :</strong> {selectedArtisanModal.verificationScore || 0} / 100</div>
-              <div><strong>CV Téléversé :</strong> {selectedArtisanModal.cvUrl ? <a href={selectedArtisanModal.cvUrl} target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>Consulter le CV 📄</a> : 'Aucun CV'}</div>
-              <div><strong>Vidéo d\'intro :</strong> {selectedArtisanModal.videoUrl ? <a href={selectedArtisanModal.videoUrl} target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>Voir la Vidéo 🎥</a> : 'Aucune vidéo'}</div>
-              {selectedArtisanModal.portfolio && selectedArtisanModal.portfolio.length > 0 && (
-                <div>
-                  <strong>Portfolio ({selectedArtisanModal.portfolio.length} projets) :</strong>
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.4rem', flexWrap: 'wrap' }}>
-                    {selectedArtisanModal.portfolio.map((item, i) => (
-                      <div key={i} style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.08)', padding: '4px 8px', borderRadius: '4px' }}>
-                        {item.title || `Projet #${i + 1}`}
+          {/* ═══ OVERVIEW ═══ */}
+          {tab === 'overview' && (
+            <>
+              {overviewError && <div className="ad-alert">⚠️ {overviewError} <button type="button" className="ad-link" onClick={loadOverview}>{tr('Réessayer', 'Retry')}</button></div>}
+
+              <section className="ad-row ad-row-hero">
+                <div className="ad-card ad-hero">
+                  <div className="ad-hero-side">
+                    <div>
+                      <h3>{tr('Activité de la plateforme', 'Platform activity')}</h3>
+                      <small>{tr('6 derniers mois', 'Last 6 months')}</small>
+                    </div>
+                    <div>
+                      <strong className="ad-big">{overview ? formatFCFA(overview.money.volume) : '—'}</strong>
+                      <small>{tr('Volume des paiements', 'Payment volume')}</small>
+                    </div>
+                    <div>
+                      <strong className="ad-big">{overview ? overview.series.requests.at(-1) : '—'}</strong>
+                      <small>{tr('Missions ce mois-ci', 'Jobs this month')}</small>
+                    </div>
+                    <button type="button" className="ad-btn" onClick={() => go('requests')}>{tr('Voir les missions', 'View jobs')}</button>
+                  </div>
+                  <div className="ad-hero-chart">
+                    <div className="ad-chart-head">
+                      <div className="ad-tabs" role="tablist">
+                        {[['missions', tr('Missions', 'Jobs')], ['payments', tr('Paiements', 'Payments')], ['signups', tr('Inscriptions', 'Sign-ups')]].map(([id, label]) => (
+                          <button key={id} type="button" role="tab" aria-selected={chartMode === id} className={chartMode === id ? 'active' : ''} onClick={() => setChartMode(id)}>{label}</button>
+                        ))}
+                      </div>
+                      <div className="ad-legend">
+                        {chartSeries.map((s) => <span key={s.id}><i style={{ background: s.color }} />{s.label}</span>)}
+                      </div>
+                    </div>
+                    {overview ? (
+                      <AreaChart labels={monthLabels} series={chartSeries} format={chartMode === 'payments' ? compact : (v) => Math.round(v)} />
+                    ) : (
+                      <div className="ad-chart-placeholder">{overviewError ? '—' : tr('Chargement…', 'Loading…')}</div>
+                    )}
+                  </div>
+                  <div className="ad-hero-stats">
+                    {[
+                      ['👥', 'c1', tr('Utilisateurs', 'Users'), stats?.totalUsers ?? '—'],
+                      ['🛡️', 'c2', tr('Artisans vérifiés', 'Verified artisans'), stats?.verifiedProfessionals ?? '—'],
+                      ['💰', 'c3', tr('Frais plateforme', 'Platform fees'), overview ? formatFCFA(overview.money.platformFees) : '—'],
+                      ['⭐', 'c4', tr('Note moyenne', 'Average rating'), stats ? `${stats.averagePlatformRating} / 5` : '—'],
+                    ].map(([icon, cls, label, value]) => (
+                      <div key={label} className="ad-mini">
+                        <span className={`ad-mini-icon ${cls}`}>{icon}</span>
+                        <div>
+                          <small>{label}</small>
+                          <strong>{value}</strong>
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
-              )}
+
+                <div className="ad-card ad-donut-card">
+                  <h3>{tr('Répartition des comptes', 'Accounts split')}</h3>
+                  {overview ? (
+                    <>
+                      <Donut
+                        parts={[
+                          { label: tr('Clients', 'Clients'), value: overview.usersByType.clients, color: 'var(--ad-c1)' },
+                          { label: tr('Artisans vérifiés', 'Verified artisans'), value: overview.usersByType.verifiedArtisans, color: 'var(--ad-c3)' },
+                          { label: tr('Autres artisans', 'Other artisans'), value: overview.usersByType.otherArtisans, color: 'var(--ad-c4)' },
+                        ]}
+                      />
+                      <div className="ad-donut-legend">
+                        {(() => {
+                          const u = overview.usersByType;
+                          const total = u.clients + u.verifiedArtisans + u.otherArtisans || 1;
+                          return [
+                            [tr('Clients', 'Clients'), u.clients, 'var(--ad-c1)'],
+                            [tr('Vérifiés', 'Verified'), u.verifiedArtisans, 'var(--ad-c3)'],
+                            [tr('Non vérifiés', 'Unverified'), u.otherArtisans, 'var(--ad-c4)'],
+                          ].map(([label, v, color]) => (
+                            <div key={label}>
+                              <strong>{Math.round((v / total) * 100)}<sup>%</sup></strong>
+                              <small><i style={{ background: color }} />{label}</small>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="ad-chart-placeholder">{tr('Chargement…', 'Loading…')}</div>
+                  )}
+                </div>
+              </section>
+
+              <section className="ad-row ad-row-4">
+                <button type="button" className="ad-grad g1" onClick={() => go('verifications')}>
+                  <small>{tr('Vérifications à examiner', 'Verifications to review')}</small>
+                  <div className="ad-grad-body">
+                    <MiniBars values={overview?.series.artisans || [0]} />
+                    <strong>{verifQ.status === 'REVIEW' ? verifications.rows.length : '—'}</strong>
+                  </div>
+                  <span className="ad-grad-foot">{tr('Documents en attente', 'Documents pending')}</span>
+                </button>
+                <button type="button" className="ad-grad g2" onClick={() => go('payments')}>
+                  <small>{tr('En séquestre', 'Held in escrow')}</small>
+                  <strong>{overview ? formatFCFA(overview.money.inEscrow) : '—'}</strong>
+                  <Wave />
+                </button>
+                <button type="button" className="ad-grad g3" onClick={() => { setPaymentQ({ page: 1, status: 'ATTENTION' }); go('payments'); }}>
+                  <small>{tr('Paiements à traiter', 'Payments to handle')}</small>
+                  <strong>{overview ? overview.money.needsAttention : '—'}</strong>
+                  <span className="ad-grad-foot">
+                    {overview ? tr(`${overview.money.refundPending} remboursement(s) · ${overview.money.payoutFailed} versement(s) échoué(s)`, `${overview.money.refundPending} refund(s) · ${overview.money.payoutFailed} failed payout(s)`) : ''}
+                  </span>
+                </button>
+                <button type="button" className="ad-grad g4" onClick={() => go('reviews')}>
+                  <small>{tr('Avis clients', 'Client reviews')}</small>
+                  <div className="ad-grad-body">
+                    <MiniBars values={overview?.series.completed || [0]} />
+                    <strong>{stats?.totalReviews ?? '—'}</strong>
+                  </div>
+                  <span className="ad-grad-foot">★ {stats?.averagePlatformRating ?? '—'} / 5</span>
+                </button>
+              </section>
+
+              <section className="ad-row ad-row-bottom">
+                <div className="ad-card">
+                  <h3>{tr('Activité récente', 'Recent activity')}</h3>
+                  {!overview ? (
+                    <p className="ad-muted">{tr('Chargement…', 'Loading…')}</p>
+                  ) : overview.activity.length === 0 ? (
+                    <p className="ad-muted">{tr('Aucune activité pour le moment.', 'No activity yet.')}</p>
+                  ) : (
+                    <ul className="ad-timeline">
+                      {overview.activity.map((a, i) => {
+                        const meta = {
+                          CLIENT_SIGNUP: ['👤', 'c1', tr('Nouveau client', 'New client')],
+                          ARTISAN_SIGNUP: ['🧑‍🔧', 'c3', tr('Nouvel artisan', 'New artisan')],
+                          ADMIN_CREATED: ['🛡️', 'c2', tr('Admin créé', 'Admin created')],
+                          REQUEST_CREATED: ['📋', 'c2', tr('Nouvelle demande', 'New request')],
+                          REVIEW_POSTED: ['⭐', 'c4', tr('Nouvel avis', 'New review')],
+                        }[a.title] || ['💳', 'c3', `${tr('Paiement', 'Payment')} · ${(PAYMENT_STATUS_LABELS[a.title.replace('PAYMENT_', '')] || {})[lang] || a.title.replace('PAYMENT_', '')}`];
+                        return (
+                          <li key={i}>
+                            <span className="ad-time">{timeAgo(a.at, lang)}</span>
+                            <span className={`ad-dot ${meta[1]}`}>{meta[0]}</span>
+                            <div>
+                              <strong>{meta[2]}</strong>
+                              <small>
+                                <b>{a.who}</b>
+                                {a.type === 'PAYMENT' ? ` · ${formatFCFA(a.detail)}` : a.detail ? ` · ${String(a.detail).slice(0, 48)}` : ''}
+                              </small>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="ad-card">
+                  <div className="ad-card-head">
+                    <div>
+                      <h3>{tr('Dernières missions', 'Latest jobs')}</h3>
+                      <small className="ad-muted">{tr('Demandes les plus récentes', 'Most recent requests')}</small>
+                    </div>
+                    <button type="button" className="ad-btn ghost" onClick={() => go('requests')}>{tr('Tout voir', 'View all')}</button>
+                  </div>
+                  <div className="ad-table-wrap">
+                    <table className="ad-table">
+                      <thead><tr><th>{tr('Réf', 'Ref')}</th><th>{tr('Client', 'Client')}</th><th>{tr('Artisan', 'Artisan')}</th><th>{tr('Date', 'Date')}</th><th>{tr('Statut', 'Status')}</th></tr></thead>
+                      <tbody>
+                        {tableState(requests, 5, tr('Aucune mission.', 'No jobs yet.'))}
+                        {!requests.loading && !requests.error && requests.rows.map((r) => (
+                          <tr key={r._id}>
+                            <td className="ad-mono">{shortRef(r._id)}</td>
+                            <td>{personName(r.customerId)}</td>
+                            <td>{personName(r.professionalId?.userId)}</td>
+                            <td className="ad-muted">{formatDate(r.createdAt, lang)}</td>
+                            <td><Pill map={REQUEST_STATUS} value={r.status} lang={lang} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
+
+          {/* ═══ USERS ═══ */}
+          {tab === 'users' && (
+            <div className="ad-card">
+              <div className="ad-toolbar">
+                <input className="ad-input" placeholder={tr('Nom, e-mail ou téléphone…', 'Name, email or phone…')} defaultValue={userQ.search}
+                  onKeyDown={(e) => e.key === 'Enter' && setUserQ((q) => ({ ...q, page: 1, search: e.currentTarget.value.trim() }))} />
+                <select className="ad-input" value={userQ.role} onChange={(e) => setUserQ((q) => ({ ...q, page: 1, role: e.target.value }))}>
+                  <option value="ALL">{tr('Tous les rôles', 'All roles')}</option>
+                  <option value="CUSTOMER">{tr('Clients', 'Clients')}</option>
+                  <option value="PROFESSIONAL">{tr('Artisans', 'Artisans')}</option>
+                  <option value="ADMIN">{tr('Admins', 'Admins')}</option>
+                </select>
+                <select className="ad-input" value={userQ.status} onChange={(e) => setUserQ((q) => ({ ...q, page: 1, status: e.target.value }))}>
+                  <option value="ALL">{tr('Tous les statuts', 'All statuses')}</option>
+                  <option value="active">{tr('Actifs', 'Active')}</option>
+                  <option value="suspended">{tr('Suspendus', 'Suspended')}</option>
+                </select>
+              </div>
+              <div className="ad-table-wrap">
+                <table className="ad-table">
+                  <thead><tr><th>{tr('Utilisateur', 'User')}</th><th>{tr('Rôle', 'Role')}</th><th>{tr('Téléphone', 'Phone')}</th><th>{tr('Inscrit le', 'Joined')}</th><th>{tr('Statut', 'Status')}</th><th className="right">{tr('Actions', 'Actions')}</th></tr></thead>
+                  <tbody>
+                    {tableState(users, 6, tr('Aucun utilisateur trouvé.', 'No users found.'))}
+                    {!users.loading && !users.error && users.rows.map((u) => {
+                      const isMe = u.email === currentUser?.email;
+                      return (
+                        <tr key={u._id}>
+                          <td>
+                            <div className="ad-person">
+                              <img src={u.profileImage || avatarFor(personName(u))} alt="" />
+                              <div><strong>{personName(u)}</strong><small>{u.email}</small></div>
+                            </div>
+                          </td>
+                          <td><span className={`ad-pill ${u.role === 'ADMIN' ? 'dark' : u.role === 'PROFESSIONAL' ? 'green' : 'blue'}`}>{u.role === 'ADMIN' ? 'Admin' : u.role === 'PROFESSIONAL' ? tr('Artisan', 'Artisan') : tr('Client', 'Client')}</span></td>
+                          <td className="ad-muted">{u.phone || '—'}</td>
+                          <td className="ad-muted">{formatDate(u.createdAt, lang)}</td>
+                          <td><span className={`ad-pill ${u.isActive ? 'green' : 'red'}`}>{u.isActive ? tr('Actif', 'Active') : tr('Suspendu', 'Suspended')}</span></td>
+                          <td className="right">
+                            <div className="ad-actions">
+                              <button type="button" className="ad-btn ghost sm" onClick={() => setDetail({ kind: 'user', data: u })}>{tr('Détails', 'Details')}</button>
+                              {!isMe && <button type="button" className="ad-btn ghost sm" disabled={busy} onClick={() => toggleUser(u)}>{u.isActive ? tr('Suspendre', 'Suspend') : tr('Réactiver', 'Reactivate')}</button>}
+                              {!isMe && <button type="button" className="ad-btn danger sm" disabled={busy} onClick={() => deleteUser(u)} aria-label={tr('Supprimer', 'Delete')}>🗑</button>}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {pager(users, (p) => setUserQ((q) => ({ ...q, page: p })))}
             </div>
-            <div style={{ marginTop: '1.25rem', textAlign: 'right' }}>
-              <button onClick={() => setSelectedArtisanModal(null)} className="btn-outline" style={{ padding: '0.4rem 1rem' }}>
-                Fermer
-              </button>
+          )}
+
+          {/* ═══ ARTISANS ═══ */}
+          {tab === 'artisans' && (
+            <div className="ad-card">
+              <div className="ad-toolbar">
+                <input className="ad-input" placeholder={tr('Métier, bio ou atelier…', 'Trade, bio or workshop…')} defaultValue={artisanQ.search}
+                  onKeyDown={(e) => e.key === 'Enter' && setArtisanQ((q) => ({ ...q, page: 1, search: e.currentTarget.value.trim() }))} />
+                <select className="ad-input" value={artisanQ.verificationStatus} onChange={(e) => setArtisanQ((q) => ({ ...q, page: 1, verificationStatus: e.target.value }))}>
+                  <option value="ALL">{tr('Toutes les vérifications', 'All verification states')}</option>
+                  <option value="verified">{tr('Vérifiés', 'Verified')}</option>
+                  <option value="unverified">{tr('Non vérifiés', 'Unverified')}</option>
+                  <option value="failed">{tr('Échoués', 'Failed')}</option>
+                  <option value="pending">{tr('En cours', 'In progress')}</option>
+                </select>
+              </div>
+              <div className="ad-table-wrap">
+                <table className="ad-table">
+                  <thead><tr><th>{tr('Artisan', 'Artisan')}</th><th>{tr('Métier', 'Trade')}</th><th>{tr('Type', 'Type')}</th><th>{tr('Vérification', 'Verification')}</th><th>{tr('Note', 'Rating')}</th><th>{tr('Missions', 'Jobs')}</th><th className="right" /></tr></thead>
+                  <tbody>
+                    {tableState(artisans, 7, tr('Aucun artisan trouvé.', 'No artisans found.'))}
+                    {!artisans.loading && !artisans.error && artisans.rows.map((p) => (
+                      <tr key={p._id}>
+                        <td>
+                          <div className="ad-person">
+                            <img src={p.userId?.profileImage || avatarFor(personName(p.userId))} alt="" />
+                            <div><strong>{p.artisanType === 'GROUPED' && p.groupName ? p.groupName : personName(p.userId)}</strong><small>{p.userId?.email}</small></div>
+                          </div>
+                        </td>
+                        <td>{p.profession}</td>
+                        <td className="ad-muted">{p.artisanType === 'GROUPED' ? tr('Atelier', 'Workshop') : tr('Solo', 'Solo')}</td>
+                        <td><Pill map={VERIF_STATUS} value={p.verifiedBadge ? 'verified' : p.verificationStatus} lang={lang} /></td>
+                        <td>{p.rating ? `★ ${Number(p.rating).toFixed(1)}` : '—'}</td>
+                        <td>{p.completedMissions || 0}</td>
+                        <td className="right"><button type="button" className="ad-btn ghost sm" onClick={() => setDetail({ kind: 'artisan', data: p })}>{tr('Détails', 'Details')}</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {pager(artisans, (p) => setArtisanQ((q) => ({ ...q, page: p })))}
+            </div>
+          )}
+
+          {/* ═══ VERIFICATIONS ═══ */}
+          {tab === 'verifications' && (
+            <div className="ad-card">
+              <div className="ad-toolbar">
+                <select className="ad-input" value={verifQ.status} onChange={(e) => setVerifQ({ status: e.target.value })}>
+                  <option value="REVIEW">{tr('À examiner (documents en attente)', 'To review (documents pending)')}</option>
+                  <option value="verified">{tr('Vérifiés', 'Verified')}</option>
+                  <option value="failed">{tr('Échoués / refusés', 'Failed / rejected')}</option>
+                  <option value="pending">{tr('En cours (quiz non terminé)', 'In progress (quiz not finished)')}</option>
+                  <option value="ALL">{tr('Toutes', 'All')}</option>
+                </select>
+                <span className="ad-muted small">{tr('Les 100 plus récentes', 'The 100 most recent')}</span>
+              </div>
+              <div className="ad-table-wrap">
+                <table className="ad-table">
+                  <thead><tr><th>{tr('Artisan', 'Artisan')}</th><th>{tr('Métier', 'Trade')}</th><th>{tr('Quiz', 'Quiz')}</th><th>{tr('Documents', 'Documents')}</th><th>{tr('Date', 'Date')}</th><th>{tr('Statut', 'Status')}</th><th className="right" /></tr></thead>
+                  <tbody>
+                    {tableState(verifications, 7, verifQ.status === 'REVIEW' ? tr('🎉 Aucun dossier à examiner.', '🎉 Nothing to review.') : tr('Aucune vérification.', 'No verifications.'))}
+                    {!verifications.loading && !verifications.error && verifications.rows.map((v) => (
+                      <tr key={v._id}>
+                        <td><strong>{personName(v.artisanId?.userId)}</strong></td>
+                        <td>{v.artisanId?.profession || '—'}</td>
+                        <td>{v.technicalAssessmentScore || v.mcqScore ? `${v.technicalAssessmentScore || v.mcqScore} %` : '—'}</td>
+                        <td>{(v.documents || []).length}{v.videoUrl ? ' + 🎥' : ''}</td>
+                        <td className="ad-muted">{formatDate(v.createdAt, lang)}</td>
+                        <td><Pill map={VERIF_STATUS} value={v.status} lang={lang} /></td>
+                        <td className="right"><button type="button" className="ad-btn sm" onClick={() => { setReviewing(v); setDecisionReason(''); }}>{tr('Examiner', 'Review')}</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ PAYMENTS ═══ */}
+          {tab === 'payments' && (
+            <div className="ad-card">
+              <div className="ad-toolbar">
+                <select className="ad-input" value={paymentQ.status} onChange={(e) => setPaymentQ({ page: 1, status: e.target.value })}>
+                  <option value="ALL">{tr('Tous les paiements', 'All payments')}</option>
+                  <option value="ATTENTION">{tr('⚠️ À traiter (remboursements, versements échoués)', '⚠️ Needs action (refunds, failed payouts)')}</option>
+                  {Object.keys(PAYMENT_STATUS_LABELS).map((s) => <option key={s} value={s}>{PAYMENT_STATUS_LABELS[s][lang]}</option>)}
+                </select>
+              </div>
+              {paymentQ.status === 'ATTENTION' && (
+                <p className="ad-note">
+                  {tr(
+                    'Remboursements et versements échoués se règlent depuis votre tableau de bord DigiPay. Une fois traité, vérifiez que le client ou l’artisan a bien reçu les fonds.',
+                    'Refunds and failed payouts are settled from your DigiPay dashboard. Once handled, check that the client or artisan received the funds.'
+                  )}
+                </p>
+              )}
+              <div className="ad-table-wrap">
+                <table className="ad-table">
+                  <thead><tr><th>{tr('Réf', 'Ref')}</th><th>{tr('Client', 'Client')}</th><th>{tr('Artisan', 'Artisan')}</th><th className="right">{tr('Montant', 'Amount')}</th><th className="right">{tr('Frais', 'Fee')}</th><th>{tr('Mode', 'Method')}</th><th>{tr('Date', 'Date')}</th><th>{tr('Statut', 'Status')}</th></tr></thead>
+                  <tbody>
+                    {tableState(payments, 8, tr('Aucun paiement.', 'No payments.'))}
+                    {!payments.loading && !payments.error && payments.rows.map((p) => (
+                      <tr key={p._id}>
+                        <td className="ad-mono" title={p.payinTransactionId}>{shortRef(p._id)}</td>
+                        <td>{personName(p.customerId)}<small className="ad-sub">{p.customerPhone}</small></td>
+                        <td>{personName(p.professionalId?.userId)}<small className="ad-sub">{p.artisanPhone || '—'}</small></td>
+                        <td className="right"><strong>{formatFCFA(p.amount)}</strong></td>
+                        <td className="right ad-muted">{formatFCFA(p.platformFee)}</td>
+                        <td className="ad-muted">{p.paymentMethod === 'ORANGE' ? 'Orange' : p.paymentMethod === 'MTN' ? 'MTN' : 'MoMo'}</td>
+                        <td className="ad-muted">{formatDate(p.createdAt, lang)}</td>
+                        <td><span className={`ad-pill ${PAYMENT_PILL[p.status] || 'grey'}`} title={p.failureReason || ''}>{PAYMENT_STATUS_LABELS[p.status]?.[lang] || p.status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {pager(payments, (p) => setPaymentQ((q) => ({ ...q, page: p })))}
+            </div>
+          )}
+
+          {/* ═══ REQUESTS ═══ */}
+          {tab === 'requests' && (
+            <div className="ad-card">
+              <div className="ad-toolbar">
+                <select className="ad-input" value={requestQ.status} onChange={(e) => setRequestQ({ page: 1, status: e.target.value })}>
+                  <option value="ALL">{tr('Tous les statuts', 'All statuses')}</option>
+                  {Object.keys(REQUEST_STATUS).map((s) => <option key={s} value={s}>{REQUEST_STATUS[s][lang === 'fr' ? 0 : 1]}</option>)}
+                </select>
+              </div>
+              <div className="ad-table-wrap">
+                <table className="ad-table">
+                  <thead><tr><th>{tr('Réf', 'Ref')}</th><th>{tr('Client', 'Client')}</th><th>{tr('Artisan', 'Artisan')}</th><th>{tr('Description', 'Description')}</th><th>{tr('Lieu', 'Location')}</th><th>{tr('Date', 'Date')}</th><th>{tr('Statut', 'Status')}</th></tr></thead>
+                  <tbody>
+                    {tableState(requests, 7, tr('Aucune mission.', 'No jobs.'))}
+                    {!requests.loading && !requests.error && requests.rows.map((r) => (
+                      <tr key={r._id}>
+                        <td className="ad-mono">{shortRef(r._id)}</td>
+                        <td>{personName(r.customerId)}</td>
+                        <td>{personName(r.professionalId?.userId)}<small className="ad-sub">{r.professionalId?.profession}</small></td>
+                        <td className="ad-ellipsis" title={r.description}>{r.description}</td>
+                        <td className="ad-muted">{r.location || '—'}</td>
+                        <td className="ad-muted">{formatDate(r.createdAt, lang)}</td>
+                        <td><Pill map={REQUEST_STATUS} value={r.status} lang={lang} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {pager(requests, (p) => setRequestQ((q) => ({ ...q, page: p })))}
+            </div>
+          )}
+
+          {/* ═══ SERVICES ═══ */}
+          {tab === 'services' && (
+            <div className="ad-card">
+              <div className="ad-toolbar">
+                <input className="ad-input" placeholder={tr('Titre, description, lieu…', 'Title, description, location…')} defaultValue={serviceQ.search}
+                  onKeyDown={(e) => e.key === 'Enter' && setServiceQ((q) => ({ ...q, page: 1, search: e.currentTarget.value.trim() }))} />
+                <select className="ad-input" value={serviceQ.status} onChange={(e) => setServiceQ((q) => ({ ...q, page: 1, status: e.target.value }))}>
+                  <option value="ALL">{tr('Tous', 'All')}</option>
+                  <option value="ACTIVE">{tr('Actifs', 'Active')}</option>
+                  <option value="INACTIVE">{tr('Masqués', 'Hidden')}</option>
+                </select>
+              </div>
+              <div className="ad-table-wrap">
+                <table className="ad-table">
+                  <thead><tr><th>{tr('Service', 'Service')}</th><th>{tr('Artisan', 'Artisan')}</th><th>{tr('Catégorie', 'Category')}</th><th className="right">{tr('Prix', 'Price')}</th><th>{tr('Statut', 'Status')}</th><th className="right" /></tr></thead>
+                  <tbody>
+                    {tableState(services, 6, tr('Aucun service.', 'No services.'))}
+                    {!services.loading && !services.error && services.rows.map((s) => (
+                      <tr key={s._id}>
+                        <td><strong>{s.title}</strong><small className="ad-sub ad-ellipsis">{s.description}</small></td>
+                        <td>{personName(s.professionalId?.userId)}</td>
+                        <td className="ad-muted">{s.categoryId?.name || '—'}</td>
+                        <td className="right">{formatFCFA(s.price)}</td>
+                        <td><span className={`ad-pill ${s.status === 'ACTIVE' ? 'green' : 'grey'}`}>{s.status === 'ACTIVE' ? tr('Actif', 'Active') : tr('Masqué', 'Hidden')}</span></td>
+                        <td className="right">
+                          <div className="ad-actions">
+                            <button type="button" className="ad-btn ghost sm" disabled={busy} onClick={() => toggleService(s)}>{s.status === 'ACTIVE' ? tr('Masquer', 'Hide') : tr('Publier', 'Publish')}</button>
+                            <button type="button" className="ad-btn danger sm" disabled={busy} onClick={() => deleteService(s)} aria-label={tr('Supprimer', 'Delete')}>🗑</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {pager(services, (p) => setServiceQ((q) => ({ ...q, page: p })))}
+            </div>
+          )}
+
+          {/* ═══ REVIEWS ═══ */}
+          {tab === 'reviews' && (
+            <div className="ad-card">
+              <div className="ad-toolbar">
+                <select className="ad-input" value={reviewQ.band} onChange={(e) => setReviewQ({ page: 1, band: e.target.value })}>
+                  <option value="ALL">{tr('Toutes les notes', 'All ratings')}</option>
+                  <option value="LOW">{tr('★ 1–2 (à surveiller)', '★ 1–2 (watch)')}</option>
+                  <option value="MID">★ 3</option>
+                  <option value="HIGH">★ 4–5</option>
+                </select>
+              </div>
+              <div className="ad-table-wrap">
+                <table className="ad-table">
+                  <thead><tr><th>{tr('Client', 'Client')}</th><th>{tr('Artisan', 'Artisan')}</th><th>{tr('Note', 'Rating')}</th><th>{tr('Commentaire', 'Comment')}</th><th>{tr('Date', 'Date')}</th><th className="right" /></tr></thead>
+                  <tbody>
+                    {tableState(reviews, 6, tr('Aucun avis.', 'No reviews.'))}
+                    {!reviews.loading && !reviews.error && reviews.rows.map((r) => (
+                      <tr key={r._id}>
+                        <td>{personName(r.customerId)}</td>
+                        <td>{personName(r.professionalId?.userId)}</td>
+                        <td className="ad-stars">{'★'.repeat(Math.round(r.rating))}<span>{'★'.repeat(5 - Math.round(r.rating))}</span></td>
+                        <td className="ad-ellipsis wide" title={r.comment}>{r.comment || '—'}</td>
+                        <td className="ad-muted">{formatDate(r.createdAt, lang)}</td>
+                        <td className="right"><button type="button" className="ad-btn danger sm" disabled={busy} onClick={() => deleteReview(r)} aria-label={tr('Supprimer', 'Delete')}>🗑</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {pager(reviews, (p) => setReviewQ((q) => ({ ...q, page: p })))}
+            </div>
+          )}
+
+          {/* ═══ BROADCAST ═══ */}
+          {tab === 'broadcast' && (
+            <form className="ad-card ad-form" onSubmit={sendBroadcast}>
+              <h3>{tr('Envoyer une notification', 'Send a notification')}</h3>
+              <p className="ad-muted">{tr('Le message apparaît dans la cloche 🔔 des utilisateurs actifs ciblés.', 'The message appears in the 🔔 bell of the targeted active users.')}</p>
+              <label>
+                {tr('Destinataires', 'Recipients')}
+                <select className="ad-input" value={broadcast.targetRole} onChange={(e) => setBroadcast((b) => ({ ...b, targetRole: e.target.value }))}>
+                  <option value="ALL">{tr('Tous les utilisateurs actifs', 'All active users')}</option>
+                  <option value="CUSTOMER">{tr('Clients', 'Clients')}</option>
+                  <option value="PROFESSIONAL">{tr('Artisans', 'Artisans')}</option>
+                </select>
+              </label>
+              <label>
+                {tr('Titre', 'Title')}
+                <input className="ad-input" required maxLength={120} value={broadcast.title} onChange={(e) => setBroadcast((b) => ({ ...b, title: e.target.value }))} />
+              </label>
+              <label>
+                {tr('Message', 'Message')}
+                <textarea className="ad-input" required rows={5} maxLength={1000} value={broadcast.message} onChange={(e) => setBroadcast((b) => ({ ...b, message: e.target.value }))} />
+              </label>
+              <button type="submit" className="ad-btn" disabled={busy}>{busy ? tr('Envoi…', 'Sending…') : tr('Envoyer', 'Send')}</button>
+            </form>
+          )}
+        </main>
+      </div>
+
+      {/* ── DETAIL MODAL (user / artisan) ── */}
+      {detail && (
+        <div className="ad-modal-backdrop" onClick={() => setDetail(null)}>
+          <div className="ad-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="ad-card-head">
+              <h3>{detail.kind === 'user' ? personName(detail.data) : personName(detail.data.userId)}</h3>
+              <button type="button" className="ad-icon-btn" onClick={() => setDetail(null)} aria-label={tr('Fermer', 'Close')}>✕</button>
+            </div>
+            {(() => {
+              const u = detail.kind === 'user' ? detail.data : detail.data.userId || {};
+              const p = detail.kind === 'artisan' ? detail.data : detail.data.professionalProfile;
+              const rows = [
+                [tr('E-mail', 'Email'), u.email],
+                [tr('Téléphone', 'Phone'), u.phone],
+                [tr('Localisation', 'Location'), u.location],
+                [tr('Rôle', 'Role'), u.role],
+                [tr('Inscrit le', 'Joined'), u.createdAt && formatDate(u.createdAt, lang)],
+                ...(p
+                  ? [
+                      [tr('Métier', 'Trade'), p.profession],
+                      [tr('Expérience', 'Experience'), p.experience ? `${p.experience} ${tr('ans', 'years')}` : null],
+                      [tr('Vérification', 'Verification'), p.verifiedBadge ? tr('Vérifié ✓', 'Verified ✓') : p.verificationStatus],
+                      [tr('Score quiz', 'Quiz score'), p.verificationScore ? `${p.verificationScore} %` : null],
+                      [tr('Note', 'Rating'), p.rating ? `★ ${Number(p.rating).toFixed(1)}` : null],
+                      [tr('Missions terminées', 'Completed jobs'), p.completedMissions],
+                      [tr('Gains', 'Earnings'), p.walletBalance != null ? formatFCFA(p.walletBalance) : null],
+                      [tr('Zone', 'Area'), p.serviceArea],
+                    ]
+                  : []),
+              ].filter(([, v]) => v !== undefined && v !== null && v !== '');
+              return (
+                <>
+                  <dl className="ad-dl">
+                    {rows.map(([k, v]) => (
+                      <React.Fragment key={k}><dt>{k}</dt><dd>{String(v)}</dd></React.Fragment>
+                    ))}
+                  </dl>
+                  {p?.bio && <p className="ad-muted">{p.bio}</p>}
+                  {p?.videoUrl && <a className="ad-link" href={p.videoUrl} target="_blank" rel="noreferrer">🎥 {tr('Vidéo de présentation', 'Presentation video')}</a>}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ── VERIFICATION REVIEW MODAL ── */}
+      {reviewing && (
+        <div className="ad-modal-backdrop" onClick={() => setReviewing(null)}>
+          <div className="ad-modal wide" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="ad-card-head">
+              <div>
+                <h3>{personName(reviewing.artisanId?.userId)}</h3>
+                <small className="ad-muted">{reviewing.artisanId?.profession} · {reviewing.artisanId?.userId?.email}</small>
+              </div>
+              <button type="button" className="ad-icon-btn" onClick={() => setReviewing(null)} aria-label={tr('Fermer', 'Close')}>✕</button>
+            </div>
+            <div className="ad-review-scores">
+              <div><small>{tr('Quiz technique', 'Technical quiz')}</small><strong>{reviewing.technicalAssessmentScore || reviewing.mcqScore || 0} %</strong></div>
+              <div><small>{tr('Statut actuel', 'Current status')}</small><Pill map={VERIF_STATUS} value={reviewing.status} lang={lang} /></div>
+              <div><small>{tr('Décision', 'Decision')}</small><span className="ad-muted small">{reviewing.adminDecision || '—'}</span></div>
+            </div>
+            <h4>{tr('Documents', 'Documents')}</h4>
+            {(reviewing.documents || []).length === 0 ? (
+              <p className="ad-muted">{tr('Aucun document fourni.', 'No documents provided.')}</p>
+            ) : (
+              <div className="ad-docs">
+                {reviewing.documents.map((d) => (
+                  <a key={d._id} href={d.fileUrl} target="_blank" rel="noreferrer" className="ad-doc">
+                    {/\.(jpe?g|png|webp|gif)(\?|$)/i.test(d.fileUrl) ? <img src={d.fileUrl} alt={d.documentType} /> : <span className="ad-doc-file">📄</span>}
+                    <span>{d.documentType}</span>
+                    <small className={`ad-pill ${d.reviewStatus === 'APPROVED' ? 'green' : d.reviewStatus === 'REJECTED' ? 'red' : 'amber'}`}>{d.reviewStatus}</small>
+                  </a>
+                ))}
+              </div>
+            )}
+            {reviewing.videoUrl && <p><a className="ad-link" href={reviewing.videoUrl} target="_blank" rel="noreferrer">🎥 {tr('Voir la vidéo de présentation', 'Watch presentation video')}</a></p>}
+            <label className="ad-form">
+              {tr('Motif (envoyé avec la décision)', 'Reason (saved with the decision)')}
+              <textarea className="ad-input" rows={3} value={decisionReason} onChange={(e) => setDecisionReason(e.target.value)}
+                placeholder={tr('ex : Pièce d’identité illisible, merci de la renvoyer.', 'e.g. ID unreadable, please upload again.')} />
+            </label>
+            <div className="ad-modal-actions">
+              <button type="button" className="ad-btn danger" disabled={busy} onClick={() => decideVerification('reject')}>{tr('Refuser', 'Reject')}</button>
+              <button type="button" className="ad-btn" disabled={busy} onClick={() => decideVerification('approve')}>{tr('Approuver ✓', 'Approve ✓')}</button>
             </div>
           </div>
         </div>

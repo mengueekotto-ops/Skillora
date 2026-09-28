@@ -1,3 +1,4 @@
+const { safeRegex } = require("../utils/regex.util");
 const { Professional, User, Service, Review, Category } = require("../models");
 const { analyzeCV } = require("../services/ai.service");
 const { updateVerificationProgression } = require("../services/verification.service");
@@ -8,11 +9,11 @@ const getAllProfessionals = async (req, res, next) => {
     const { profession, status, location, search, latitude, longitude } = req.query;
     const query = {};
 
-    if (profession) query.profession = new RegExp(profession, "i");
+    if (profession) query.profession = safeRegex(profession);
     if (status) query.verificationStatus = status;
 
     if (search) {
-      const reg = new RegExp(search, "i");
+      const reg = safeRegex(search);
       query.$or = [{ profession: reg }, { bio: reg }, { groupName: reg }];
     }
 
@@ -21,7 +22,7 @@ const getAllProfessionals = async (req, res, next) => {
       .sort({ rating: -1, createdAt: -1 });
 
     if (location) {
-      const locReg = new RegExp(location, "i");
+      const locReg = safeRegex(location);
       professionals = professionals.filter(
         (p) => p.userId && p.userId.location && locReg.test(p.userId.location)
       );
@@ -376,9 +377,9 @@ const getNearbyProfessionals = async (req, res, next) => {
     const { latitude, longitude, maxDistance, profession, search, sortBy = "distance" } = req.query;
 
     const query = {};
-    if (profession) query.profession = new RegExp(profession, "i");
+    if (profession) query.profession = safeRegex(profession);
     if (search) {
-      const reg = new RegExp(search, "i");
+      const reg = safeRegex(search);
       query.$or = [{ profession: reg }, { bio: reg }, { groupName: reg }, { skills: reg }];
     }
 

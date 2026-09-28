@@ -10,6 +10,9 @@ import {
   shortRef,
 } from '../api';
 import { BookingDialog, PaymentDialog, ReviewDialog } from './JobDialogs';
+import ClientOverview from './ClientOverview';
+import { useNotifications, NotificationPanel } from './Navbar';
+import './ClientDashboard.css';
 
 const ACTIVE_STATUSES = ['PENDING', 'ACCEPTED', 'IN_PROGRESS'];
 
@@ -20,13 +23,21 @@ export default function ClientDashboard({
   triggerToast,
   t,
   lang,
-  onSelectArtisan
+  onSelectArtisan,
+  onLogout,
+  onOpenAiAssistant,
+  theme,
+  setTheme,
+  setLang
 }) {
   const isFrench = lang === 'fr';
   const tr = (fr, en) => (isFrench ? fr : en);
 
-  // Navigation tab: 'OVERVIEW' | 'ORDERS' | 'BOOKMARKS' | 'PAYMENTS' | 'SETTINGS'
-  const [activeTab, setActiveTab] = useState('OVERVIEW');
+  // Navigation: 'DASHBOARD' | 'EXPLORE' | 'ORDERS' | 'BOOKMARKS' | 'PAYMENTS' | 'SETTINGS'
+  const [activeTab, setActiveTab] = useState('DASHBOARD');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifications = useNotifications(Boolean(currentUser));
   const [ordersSubTab, setOrdersSubTab] = useState('ACTIVE');
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,7 +109,6 @@ export default function ClientDashboard({
   const orders = useMemo(() => requests.map((r) => mapRequest(r, payments)), [requests, payments]);
   const activeOrders = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
   const historyOrders = orders.filter((o) => !ACTIVE_STATUSES.includes(o.status));
-  const totalEscrowLocked = orders.reduce((sum, o) => sum + (o.escrowLocked ? o.amount : 0), 0);
 
   const filteredArtisans = artisans.filter((a) => {
     if (selectedFilter === 'VERIFIED' && !a.verified) return false;
@@ -284,55 +294,202 @@ export default function ClientDashboard({
 
   const clientName = currentUser?.name || tr('Client', 'Client');
 
-  return (
-    <div className="client-dashboard-container">
-      {/* HEADER & PROFILE OVERVIEW */}
-      <div className="client-profile-header-card">
-        <div className="client-profile-main-info">
-          <div className="client-avatar-large-wrap" onClick={onOpenSettings} style={{ cursor: 'pointer' }} title={tr('Changer la photo de profil', 'Change profile picture')}>
-            <img
-              src={currentUser?.profileImage || avatarFor(clientName)}
-              alt={clientName}
-              className="client-avatar-img"
-            />
-            <span className="avatar-edit-overlay-btn">📷</span>
-          </div>
+  const NAV_ITEMS = [
+    { id: 'DASHBOARD', icon: '▦', label: tr('Tableau de bord', 'Dashboard') },
+    { id: 'EXPLORE', icon: '🔍', label: tr('Explorer les artisans', 'Explore artisans') },
+    { id: 'ORDERS', icon: '📋', label: tr('Mes réservations', 'My bookings'), badge: activeOrders.length || null },
+    { id: 'BOOKMARKS', icon: '⭐', label: tr('Favoris', 'Bookmarks'), badge: bookmarks.length || null },
+    { id: 'PAYMENTS', icon: '💳', label: tr('Paiements', 'Payments') },
+  ];
 
-          <div className="client-profile-details">
-            <div className="client-badge-pill">🇨🇲 {tr('ESPACE CLIENT', 'CLIENT WORKSPACE')}</div>
-            <h1 className="client-profile-name">{clientName}</h1>
-            <p className="client-location-sub">
-              📍 {currentUser?.city || tr('Ville non renseignée', 'City not set')}
-              {currentUser?.phone ? ` • ${currentUser.phone}` : ''}
-            </p>
-            {totalEscrowLocked > 0 && (
-              <p className="client-location-sub">🔒 {tr('En séquestre', 'In escrow')} : <strong>{formatFCFA(totalEscrowLocked)}</strong></p>
-            )}
+  const PAGE_TITLES = {
+    DASHBOARD: [tr('Tableau de bord', 'Dashboard'), tr(`Bonjour ${currentUser?.firstName || ''} 👋 Voici l'activité de votre compte.`, `Hello ${currentUser?.firstName || ''} 👋 Here is your account activity.`)],
+    EXPLORE: [tr('Explorer les artisans', 'Explore artisans'), tr('Trouvez le bon professionnel près de chez vous.', 'Find the right professional near you.')],
+    ORDERS: [tr('Mes réservations', 'My bookings'), tr('Suivez, payez et validez vos travaux.', 'Track, pay for and confirm your jobs.')],
+    BOOKMARKS: [tr('Favoris', 'Bookmarks'), tr('Vos artisans enregistrés.', 'Your saved artisans.')],
+    PAYMENTS: [tr('Paiements', 'Payments'), tr('Historique et garantie séquestre.', 'History and escrow guarantee.')],
+    SETTINGS: [tr('Paramètres', 'Settings'), tr('Vos coordonnées et votre adresse.', 'Your contact details and address.')],
+  };
+  const [pageTitle, pageSubtitle] = PAGE_TITLES[activeTab] || PAGE_TITLES.DASHBOARD;
+
+  const goTo = (tab) => {
+    setActiveTab(tab);
+    setMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const renderNavItem = (item) => (
+    <button
+      key={item.id}
+      type="button"
+      className={`cd-nav-item ${activeTab === item.id ? 'active' : ''}`}
+      onClick={() => (item.onClick ? item.onClick() : goTo(item.id))}
+      aria-current={activeTab === item.id ? 'page' : undefined}
+    >
+      <span className="cd-nav-icon">{item.icon}</span>
+      <span>{item.label}</span>
+      {item.badge ? <span className={`cd-nav-badge ${item.badgeClass || ''}`}>{item.badge}</span> : null}
+    </button>
+  );
+
+  return (
+    <div className={`cd-layout ${menuOpen ? 'menu-open' : ''}`} onClick={() => menuOpen && setMenuOpen(false)}>
+      {/* ── SIDEBAR ─────────────────────────────────────────────── */}
+      <aside className="cd-sidebar" onClick={(e) => e.stopPropagation()} aria-label={tr('Navigation', 'Navigation')}>
+        <button type="button" className="cd-brand" onClick={() => goTo('DASHBOARD')}>
+          <span className="cd-brand-mark" aria-hidden="true"><span /><span /><span /></span>
+          Skillora
+        </button>
+
+        <div className="cd-workspace">
+          <span className="cd-workspace-icon">✦</span>
+          <div>
+            <small>{tr('Espace client', 'Client workspace')}</small>
+            <strong>{currentUser?.city || tr('Cameroun', 'Cameroon')}</strong>
           </div>
         </div>
-      </div>
 
-      {/* NAVIGATION TABS */}
-      <nav className="client-tabs-nav">
-        <button className={`client-nav-tab ${activeTab === 'OVERVIEW' ? 'active' : ''}`} onClick={() => setActiveTab('OVERVIEW')}>
-          🔍 {tr('Explorer & Artisans', 'Explore Artisans')}
-        </button>
-        <button className={`client-nav-tab ${activeTab === 'ORDERS' ? 'active' : ''}`} onClick={() => setActiveTab('ORDERS')}>
-          📋 {tr('Mes Réservations', 'My Orders')} ({activeOrders.length})
-        </button>
-        <button className={`client-nav-tab ${activeTab === 'BOOKMARKS' ? 'active' : ''}`} onClick={() => setActiveTab('BOOKMARKS')}>
-          ⭐ {tr('Favoris', 'Bookmarks')} ({bookmarks.length})
-        </button>
-        <button className={`client-nav-tab ${activeTab === 'PAYMENTS' ? 'active' : ''}`} onClick={() => setActiveTab('PAYMENTS')}>
-          💳 {tr('Paiements & Sécurité', 'Payments')}
-        </button>
-        <button className={`client-nav-tab ${activeTab === 'SETTINGS' ? 'active' : ''}`} onClick={() => setActiveTab('SETTINGS')}>
-          ⚙️ {tr('Paramètres Compte', 'Settings')}
-        </button>
-      </nav>
+        <form
+          className="cd-search"
+          role="search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            goTo('EXPLORE');
+          }}
+        >
+          <span aria-hidden="true">🔍</span>
+          <input
+            type="search"
+            placeholder={tr('Rechercher un artisan…', 'Search artisans…')}
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              if (activeTab !== 'EXPLORE') setActiveTab('EXPLORE');
+            }}
+            aria-label={tr('Rechercher un artisan', 'Search artisans')}
+          />
+        </form>
+
+        <span className="cd-nav-label">{tr('Navigation', 'Navigation')}</span>
+        <nav className="cd-nav">
+          {NAV_ITEMS.map(renderNavItem)}
+          {onOpenAiAssistant &&
+            renderNavItem({
+              id: 'AI',
+              icon: '✨',
+              label: tr('Assistant IA', 'AI assistant'),
+              badge: 'IA',
+              badgeClass: 'new',
+              onClick: () => {
+                setMenuOpen(false);
+                onOpenAiAssistant();
+              },
+            })}
+        </nav>
+
+        <div className="cd-sidebar-spacer" />
+
+        <div className="cd-prefs">
+          <button type="button" className={`cd-pref-btn ${lang === 'fr' ? 'active' : ''}`} onClick={() => setLang?.('fr')}>FR</button>
+          <button type="button" className={`cd-pref-btn ${lang === 'en' ? 'active' : ''}`} onClick={() => setLang?.('en')}>EN</button>
+          <button
+            type="button"
+            className="cd-pref-btn"
+            onClick={() => setTheme?.(theme === 'dark' ? 'light' : 'dark')}
+            aria-label={tr('Changer de thème', 'Toggle theme')}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+        </div>
+
+        <nav className="cd-nav">
+          {renderNavItem({ id: 'SETTINGS', icon: '⚙️', label: tr('Paramètres', 'Settings') })}
+        </nav>
+
+        <span className="cd-nav-label">{tr('Compte', 'Account')}</span>
+        <div className="cd-account">
+          <button type="button" onClick={onOpenSettings} title={tr("Mon profil", "My profile")} style={{ padding: 0, border: 0, background: "none", cursor: "pointer", borderRadius: "50%" }}>
+            <img src={currentUser?.profileImage || avatarFor(clientName)} alt={tr("Mon profil", "My profile")} />
+          </button>
+          <div className="cd-account-info">
+            <strong>{clientName}</strong>
+            <span>{currentUser?.email}</span>
+          </div>
+          {onLogout && (
+            <button type="button" className="cd-icon-btn" onClick={onLogout} title={tr('Se déconnecter', 'Log out')} aria-label={tr('Se déconnecter', 'Log out')}>
+              ↪
+            </button>
+          )}
+        </div>
+      </aside>
+
+      {/* ── MAIN PANEL ──────────────────────────────────────────── */}
+      <main className="cd-main">
+        <header className="cd-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+            <button
+              type="button"
+              className="cd-mobile-menu"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen(true);
+              }}
+              aria-label={tr('Ouvrir le menu', 'Open menu')}
+            >
+              ☰
+            </button>
+            <div style={{ minWidth: 0 }}>
+              <h1>{pageTitle}</h1>
+              <p>{pageSubtitle}</p>
+            </div>
+          </div>
+          <div className="cd-header-actions">
+            <button
+              type="button"
+              className="cd-bell"
+              onClick={() => {
+                if (!notifOpen) notifications.refresh();
+                setNotifOpen(!notifOpen);
+              }}
+              aria-label={`${tr('Notifications', 'Notifications')} (${notifications.unread})`}
+            >
+              🔔
+              {notifications.unread > 0 && (
+                <span className="cd-bell-dot">{notifications.unread > 9 ? '9+' : notifications.unread}</span>
+              )}
+            </button>
+            <button type="button" className="cd-btn-primary" onClick={() => goTo('EXPLORE')}>
+              + <span className="cd-btn-long">{tr('Réserver un artisan', 'Book an artisan')}</span>
+            </button>
+          </div>
+        </header>
+
+        {notifOpen && (
+          <NotificationPanel
+            onClose={() => setNotifOpen(false)}
+            items={notifications.items}
+            onMarkAllRead={notifications.markAllRead}
+            lang={lang}
+          />
+        )}
+
+        {activeTab === 'DASHBOARD' && (
+          <ClientOverview
+            orders={orders}
+            payments={payments}
+            bookmarks={bookmarks}
+            artisans={artisans}
+            loading={loading.orders || loading.artisans}
+            tr={tr}
+            lang={lang}
+            onGoto={goTo}
+            onSelectArtisan={onSelectArtisan}
+            onBook={(a) => setBookingTarget(a)}
+          />
+        )}
 
       {/* TAB 1: ARTISANS DIRECTORY */}
-      {activeTab === 'OVERVIEW' && (
+      {activeTab === 'EXPLORE' && (
         <div className="tab-content-panel">
           <div className="client-search-bar" style={{ marginBottom: '1.5rem' }}>
             <span className="search-icon">🔍</span>
@@ -391,7 +548,7 @@ export default function ClientDashboard({
                 renderEmpty('⏳', tr('Chargement…', 'Loading…'), '')
               ) : activeOrders.length === 0 ? (
                 renderEmpty('📋', tr('Aucune réservation en cours', 'No active bookings'), tr('Réservez un artisan qualifié sur la plateforme', 'Explore artisans to book a professional'),
-                  <button className="btn-primary-gold" onClick={() => setActiveTab('OVERVIEW')}>{tr('Explorer les Artisans →', 'Explore Artisans →')}</button>)
+                  <button className="btn-primary-gold" onClick={() => setActiveTab('EXPLORE')}>{tr('Explorer les Artisans →', 'Explore Artisans →')}</button>)
               ) : (
                 activeOrders.map((order) => (
                   <div key={order.id} className="client-order-card">
@@ -617,6 +774,7 @@ export default function ClientDashboard({
           triggerToast={triggerToast}
         />
       )}
+      </main>
     </div>
   );
 }

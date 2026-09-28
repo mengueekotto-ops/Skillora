@@ -95,7 +95,7 @@ export default function ForgotPasswordModal({ isOpen, onClose, triggerToast, lan
       padding: '1rem',
     }}>
       <div style={{
-        background: '#0f172a',
+        background: '#13201a',
         border: '1px solid rgba(255, 183, 0, 0.4)',
         borderRadius: '16px',
         width: '100%',

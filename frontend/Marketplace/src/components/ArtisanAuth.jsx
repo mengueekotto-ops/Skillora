@@ -4,11 +4,12 @@ import VerificationQuiz from './VerificationQuiz';
 import VideoCapture from './VideoCapture';
 import ForgotPasswordModal from './ForgotPasswordModal';
 import { api, normalizeUser, saveSession } from '../api';
+import AuthShell, { AuthField, PasswordInput, StrengthMeter } from './AuthShell';
 
 const MIN_PASSWORD_LENGTH = 8;
 
-export default function ArtisanAuth({ onSwitchToClient, onBackToLanding, onLoginSuccess, triggerToast, t, lang, setLang, theme, setTheme }) {
-  const [tab, setTab] = useState('login');
+export default function ArtisanAuth({ initialTab, onSwitchToClient, onBackToLanding, onLoginSuccess, triggerToast, t, lang, setLang }) {
+  const [tab, setTab] = useState(initialTab === 'signup' ? 'signup' : 'login');
   const [wizardStep, setWizardStep] = useState(1);
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
   const tr = (fr, en) => (lang === 'fr' ? fr : en);
@@ -243,441 +244,359 @@ export default function ArtisanAuth({ onSwitchToClient, onBackToLanding, onLogin
     }
   };
 
+  const TRADES = [
+    'Électricien', 'Plombier', 'Menuisier', 'Maçon', 'Peintre', 'Soudeur', 'Carreleur', 'Climatisation & Froid',
+    'Mécanicien', 'Technicien électroménager', 'Réparateur téléphones & ordinateurs', 'Couturier', 'Coiffeur',
+    'Jardinier', 'Installateur solaire', 'Charpentier', 'Vitrier', 'Serrurier',
+  ];
+
+  const STEPS = [
+    { num: 1, title: tr('Compte', 'Account'), hint: tr('Vos informations et votre accès', 'Your details and login') },
+    { num: 2, title: tr('Métier & vidéo', 'Trade & video'), hint: tr('Spécialité, expérience, présentation de 60 s', 'Specialty, experience, 60 s intro') },
+    { num: 3, title: tr('Quiz technique', 'Technical quiz'), hint: tr('10 questions — 60 % pour le badge', '10 questions — 60% for the badge') },
+    { num: 4, title: tr('Documents', 'Documents'), hint: tr("Pièce d'identité, selfie, diplôme", 'ID, selfie, certificate') },
+  ];
+
+  const isSingle = artisanType === 'SINGLE';
+  const locked = Boolean(account); // account already created: step-1 details can no longer change
+
+  const stepAside =
+    tab === 'signup' ? (
+      <ol className="auth2-steps">
+        {STEPS.map((s) => (
+          <li key={s.num} className={wizardStep === s.num ? 'active' : wizardStep > s.num ? 'done' : ''}>
+            <span className="num">{wizardStep > s.num ? '✓' : s.num}</span>
+            <div>
+              <strong>{s.title}</strong>
+              <small>{s.hint}</small>
+            </div>
+          </li>
+        ))}
+      </ol>
+    ) : null;
+
+  const progress = (
+    <div className="auth2-progress" aria-hidden="true">
+      {STEPS.map((s) => (
+        <span key={s.num} className={wizardStep >= s.num ? 'done' : ''} />
+      ))}
+    </div>
+  );
+
+  const stepHeader = (title, subtitle) => (
+    <>
+      {progress}
+      <div className="auth2-step-head">
+        <h1 className="auth2-title">{title}</h1>
+        <span className="auth2-step-count">{tr(`Étape ${wizardStep} sur 4`, `Step ${wizardStep} of 4`)}</span>
+      </div>
+      <p className="auth2-subtitle">{subtitle}</p>
+    </>
+  );
+
+  const passwordField = (
+    <AuthField id="artisan-new-password" label={tr('Mot de passe', 'Password')}>
+      <PasswordInput
+        id="artisan-new-password"
+        lang={lang}
+        autoComplete="new-password"
+        placeholder={tr('8 caractères minimum', 'At least 8 characters')}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        show={showPass}
+        onToggle={() => setShowPass(!showPass)}
+        disabled={locked}
+        minLength={8}
+      />
+    </AuthField>
+  );
+
+  const kycCard = (title, desc, value, setValue, aspect, label) => (
+    <div className={`auth2-kyc-card ${value ? 'done' : ''}`}>
+      <h4>{title}</h4>
+      <p>{desc}</p>
+      {value && <img src={value} alt={title} />}
+      <ImageCapturePicker
+        value={value}
+        onChange={(url) => setValue(url)}
+        triggerToast={triggerToast}
+        lang={lang}
+        label={label}
+        aspectRatio={aspect}
+        buttonText={value ? tr('🔄 Remplacer', '🔄 Replace') : tr('📁 Galerie ou 📷 Photo', '📁 Gallery or 📷 Photo')}
+      />
+      {value && <p>✓ {tr('Envoyé — examen par notre équipe', 'Uploaded — reviewed by our team')}</p>}
+    </div>
+  );
+
   return (
-    <div className="onboarding-screen-wrapper artisan-theme relative w-full flex flex-col items-center justify-center overflow-hidden" style={{ paddingTop: '60px' }}>
-      {/* Full-Width Top Header Navbar — Same as Home Page */}
-      <header className="fullwidth-top-navbar w-full fixed top-0 left-0 right-0 z-50">
-        <div className="navbar-fullwidth-inner w-full flex items-center justify-between px-6 py-3">
-          <div className="landing-brand flex items-center gap-2">
-            <span className="brand-icon-gem text-2xl" onClick={onBackToLanding} style={{ cursor: 'pointer' }}>💎</span>
-            <span className="brand-name text-xl font-extrabold tracking-tight" onClick={onBackToLanding} style={{ cursor: 'pointer' }}>Skillora</span>
-            {onBackToLanding && (
-              <button className="auth-back-btn ml-2" onClick={onBackToLanding} title="Retour à l'accueil" style={{ padding: '0.2rem 0.6rem', fontSize: '0.78rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: 'inherit', cursor: 'pointer' }}>
-                ← {lang === 'fr' ? 'Accueil' : 'Home'}
-              </button>
-            )}
-          </div>
+    <AuthShell
+      lang={lang}
+      setLang={setLang}
+      onBack={onBackToLanding}
+      wide={tab === 'signup'}
+      aside={stepAside}
+      tagline={tr('Espace artisan & ateliers', 'Artisans & workshops')}
+    >
+      {tab === 'login' ? (
+        <form onSubmit={handleLogin} className="auth2-form">
+          <h1 className="auth2-title">{tr('Espace artisan', 'Artisan sign in')}</h1>
+          <p className="auth2-subtitle">{tr('Gérez vos missions, vos paiements et votre profil.', 'Manage your jobs, payments and profile.')}</p>
 
-          <div className="landing-controls flex items-center gap-3">
-            {/* Language Switcher */}
-            <div className="lang-switcher-pill flex items-center rounded-lg p-1 text-xs">
-              <button
-                className={`lang-btn px-2 py-1 rounded font-bold transition-all ${lang === 'en' ? 'active' : ''}`}
-                onClick={() => setLang && setLang('en')}
-                title="English"
-              >
-                🇬🇧 EN
+          <AuthField
+            id="artisan-email"
+            label={tr('E-mail ou téléphone', 'Email or phone')}
+            type="text"
+            autoComplete="username"
+            placeholder="pro@exemple.cm"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <AuthField
+            id="artisan-password"
+            label={tr('Mot de passe', 'Password')}
+            extra={
+              <button type="button" className="auth2-link" onClick={() => setIsForgotModalOpen(true)}>
+                {tr('Mot de passe oublié ?', 'Forgot password?')}
               </button>
-              <span className="lang-divider px-1 opacity-40">|</span>
-              <button
-                className={`lang-btn px-2 py-1 rounded font-bold transition-all ${lang === 'fr' ? 'active' : ''}`}
-                onClick={() => setLang && setLang('fr')}
-                title="Français"
-              >
-                🇫🇷 FR
-              </button>
-            </div>
+            }
+          >
+            <PasswordInput
+              id="artisan-password"
+              lang={lang}
+              autoComplete="current-password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              show={showPass}
+              onToggle={() => setShowPass(!showPass)}
+              required
+            />
+          </AuthField>
 
-            {/* Theme Toggle */}
-            <div className="theme-toggle-pill flex items-center rounded-lg p-1 text-xs">
-              <button
-                type="button"
-                className={`theme-toggle-btn px-2 py-1 rounded font-semibold transition-all ${theme === 'light' ? 'active' : ''}`}
-                onClick={() => setTheme && setTheme('light')}
-                title="Mode Clair"
-              >
-                ☀️ <span className="theme-toggle-label ml-1">Clair</span>
-              </button>
-              <button
-                type="button"
-                className={`theme-toggle-btn px-2 py-1 rounded font-semibold transition-all ${theme === 'dark' ? 'active' : ''}`}
-                onClick={() => setTheme && setTheme('dark')}
-                title="Mode Sombre"
-              >
-                🌙 <span className="theme-toggle-label ml-1">Sombre</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+          <button type="submit" className="auth2-btn" disabled={isSubmitting} style={{ marginTop: '8px' }}>
+            {isSubmitting ? tr('Connexion…', 'Signing in…') : tr('Se connecter', 'Sign in')}
+          </button>
 
-      {/* Ultra-Compact Auth Card Fits Above the Fold (100vh) */}
-      <div className="auth-panel compact-panel login-card-spec w-full p-3 my-auto shadow-2xl rounded-2xl">
-        <div className="auth-header text-center mb-2">
-          <div className="auth-label" style={{ fontSize: '0.72rem', marginBottom: '0.1rem' }}>{t.forArtisans}</div>
-          <h2 className="auth-title" style={{ fontSize: '1.2rem', margin: '0 0 0.15rem 0' }}>
-            {tab === 'login'
-              ? (lang === 'fr' ? 'Espace Pro & Collectifs' : 'Artisan Sign In')
-              : (lang === 'fr' ? 'Rejoindre le Réseau d\'Artisans' : 'Artisan Registration')}
-          </h2>
-          <p className="auth-subtitle" style={{ fontSize: '0.75rem', margin: 0, color: 'var(--text-muted)' }}>
-            {tab === 'login'
-              ? (lang === 'fr' ? 'Accédez à votre tableau de bord et vos missions.' : 'Access your dashboard and client jobs.')
-              : (lang === 'fr' ? 'Créez votre compte. Vérification IA optionnelle pour le Badge.' : 'Create your account. Optional AI verification for Verified Badge.')}
+          <p className="auth2-bottom">
+            {tr('Nouveau sur Skillora ?', 'New to Skillora?')}
+            <button type="button" className="auth2-link strong" onClick={() => { setTab('signup'); setWizardStep(1); }}>
+              {tr('Créer un compte artisan', 'Create an artisan account')}
+            </button>
           </p>
-        </div>
 
-        <div className="tab-bar" style={{ marginBottom: '0.5rem', padding: '0.2rem' }}>
-          <button
-            className={`tab-item ${tab === 'login' ? 'active' : ''}`}
-            onClick={() => setTab('login')}
-            style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
-          >
-            {t.signIn}
-          </button>
-          <button
-            className={`tab-item ${tab === 'signup' ? 'active' : ''}`}
-            onClick={() => { setTab('signup'); setWizardStep(1); }}
-            style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
-          >
-            {t.createAccount}
-          </button>
-        </div>
+          <div className="auth2-divider" />
+          <p className="auth2-role-switch">
+            {tr('Vous cherchez un artisan ?', 'Looking to hire an artisan?')}
+            <button type="button" className="auth2-link strong" onClick={onSwitchToClient}>
+              {tr('Espace client →', 'Client space →')}
+            </button>
+          </p>
+        </form>
+      ) : (
+        <div className="auth2-form">
+          {/* STEP 1 — ACCOUNT */}
+          {wizardStep === 1 && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleStartVerification();
+              }}
+            >
+              {stepHeader(
+                tr('Créer un compte artisan', 'Create an artisan account'),
+                tr('Travaillez seul ou en atelier. La vérification est facultative mais vous donne le badge ✓.', 'Work solo or as a workshop. Verification is optional but earns you the ✓ badge.')
+              )}
 
-        {/* LOGIN FORM */}
-        {tab === 'login' ? (
-          <form onSubmit={handleLogin} className="space-y-2">
-            <div className="field">
-              <label className="field-label" style={{ fontSize: '0.75rem' }}>{t.emailOrPhone}</label>
-              <div className="input-wrap">
-                <span className="input-icon">✉</span>
-                <input
-                  type="text"
-                  className="input-field"
-                  placeholder="pro@skillora.cm or +237 6xx xx xx xx"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  style={{ padding: '0.45rem 0.6rem 0.45rem 2.2rem', fontSize: '0.82rem' }}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="field">
-              <div className="field-row">
-                <label className="field-label" style={{ fontSize: '0.75rem' }}>{t.password}</label>
-                <span className="forgot-link" style={{ cursor: 'pointer', fontSize: '0.75rem' }} onClick={() => setIsForgotModalOpen(true)}>
-                  {t.forgotPass}
-                </span>
-              </div>
-              <div className="input-wrap">
-                <span className="input-icon">🔒</span>
-                <input
-                  type={showPass ? 'text' : 'password'}
-                  className="input-field"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  style={{ padding: '0.45rem 2.2rem 0.45rem 2.2rem', fontSize: '0.82rem' }}
-                  required
-                />
-                <button type="button" className="pass-toggle" onClick={() => setShowPass(!showPass)}>
-                  {showPass ? '🙈' : '👁'}
+              <div className="auth2-segment" role="group" aria-label={tr("Type d'artisan", 'Artisan type')}>
+                <button type="button" className={isSingle ? 'active' : ''} onClick={() => !locked && setArtisanType('SINGLE')} disabled={locked}>
+                  🧑‍🔧 {tr('Artisan indépendant', 'Solo artisan')}
+                </button>
+                <button type="button" className={!isSingle ? 'active' : ''} onClick={() => !locked && setArtisanType('GROUPED')} disabled={locked}>
+                  🏢 {tr('Atelier / groupe', 'Workshop / group')}
                 </button>
               </div>
-            </div>
 
-            <button type="submit" className="submit-btn w-full" style={{ padding: '0.55rem', fontSize: '0.85rem' }} disabled={isSubmitting}>
-              {isSubmitting ? (lang === 'fr' ? 'Connexion en cours...' : 'Signing in...') : `${t.signIn} →`}
-            </button>
-          </form>
-        ) : (
-          /* MULTI-STEP VERIFICATION WIZARD */
-          <div>
-            {/* Compact Step Indicators */}
-            <div className="wizard-stepper compact-stepper">
-              <div className="step-track">
-                <div className="step-progress" style={{ width: `${((wizardStep - 1) / 3) * 100}%` }}></div>
-              </div>
-
-              {[
-                { num: 1, label: '1. Profil' },
-                { num: 2, label: '2. Métier' },
-                { num: 3, label: '3. Quiz IA' },
-                { num: 4, label: '4. Documents' },
-              ].map((s) => (
-                <div
-                  key={s.num}
-                  className={`step-node ${wizardStep === s.num ? 'active' : wizardStep > s.num ? 'completed' : ''}`}
-                  onClick={() => { if (s.num <= wizardStep) setWizardStep(s.num); }}
-                >
-                  <div className="step-circle">{s.num}</div>
-                  <span className="step-title">{s.label}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* STEP 1: STRUCTURE & CREDENTIALS IN 2-COLUMN GRID */}
-            {wizardStep === 1 && (
-              <div>
-                {/* Horizontal Low-Profile Radio Chips for Structure */}
-                <div className="artisan-type-chips">
-                  <button
-                    type="button"
-                    className={`type-chip ${artisanType === 'SINGLE' ? 'selected' : ''}`}
-                    onClick={() => setArtisanType('SINGLE')}
-                  >
-                    <span>🧑‍🔧</span>
-                    <span>{t.singleArtisan}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className={`type-chip ${artisanType === 'GROUPED' ? 'selected' : ''}`}
-                    onClick={() => setArtisanType('GROUPED')}
-                  >
-                    <span>👥🏢</span>
-                    <span>{t.groupedArtisan}</span>
-                  </button>
-                </div>
-
-                {artisanType === 'SINGLE' ? (
-                  <div className="compact-form-grid">
-                    <div className="field">
-                      <label className="field-label" style={{ fontSize: '0.75rem' }}>{t.fullName}</label>
-                      <div className="input-wrap">
-                        <span className="input-icon">👤</span>
-                        <input
-                          type="text"
-                          className="input-field"
-                          placeholder="e.g. Emmanuel Ngu"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          style={{ padding: '0.4rem 0.6rem 0.4rem 2.2rem', fontSize: '0.8rem' }}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="field">
-                      <label className="field-label" style={{ fontSize: '0.75rem' }}>{t.email}</label>
-                      <div className="input-wrap">
-                        <span className="input-icon">✉</span>
-                        <input
-                          type="email"
-                          className="input-field"
-                          placeholder="pro@skillora.cm"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          style={{ padding: '0.4rem 0.6rem 0.4rem 2.2rem', fontSize: '0.8rem' }}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="field">
-                      <label className="field-label" style={{ fontSize: '0.75rem' }}>{t.phone}</label>
-                      <div className="input-wrap">
-                        <span className="input-icon">📞</span>
-                        <input
-                          type="tel"
-                          className="input-field"
-                          placeholder="+237 6xx xx xx xx"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          style={{ padding: '0.4rem 0.6rem 0.4rem 2.2rem', fontSize: '0.8rem' }}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="field">
-                      <label className="field-label" style={{ fontSize: '0.75rem' }}>{t.password}</label>
-                      <div className="input-wrap">
-                        <span className="input-icon">🔒</span>
-                        <input
-                          type={showPass ? 'text' : 'password'}
-                          className="input-field"
-                          placeholder="Min 8 chars"
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          style={{ padding: '0.4rem 2.2rem 0.4rem 2.2rem', fontSize: '0.8rem' }}
-                          required
-                        />
-                        <button type="button" className="pass-toggle" onClick={() => setShowPass(!showPass)}>
-                          {showPass ? '🙈' : '👁'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+              <div className="auth2-grid">
+                {isSingle ? (
+                  <AuthField
+                    id="artisan-name"
+                    label={tr('Nom complet', 'Full name')}
+                    type="text"
+                    autoComplete="name"
+                    placeholder="Emmanuel Ngu"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    disabled={locked}
+                    required
+                  />
                 ) : (
-                  <div className="compact-form-grid">
-                    <div className="field" style={{ gridColumn: 'span 2' }}>
-                      <label className="field-label" style={{ fontSize: '0.75rem' }}>🏢 {t.groupName}</label>
-                      <div className="input-wrap">
-                        <span className="input-icon">🏷️</span>
-                        <input
-                          type="text"
-                          className="input-field"
-                          placeholder="Atelier Élite Bâtiment & Énergie"
-                          value={groupName}
-                          onChange={(e) => setGroupName(e.target.value)}
-                          style={{ padding: '0.4rem 0.6rem 0.4rem 2.2rem', fontSize: '0.8rem' }}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="field">
-                      <label className="field-label" style={{ fontSize: '0.75rem' }}>👤 {t.leadName}</label>
-                      <div className="input-wrap">
-                        <span className="input-icon">⭐</span>
-                        <input
-                          type="text"
-                          className="input-field"
-                          placeholder="Jean-Paul Kamga"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          style={{ padding: '0.4rem 0.6rem 0.4rem 2.2rem', fontSize: '0.8rem' }}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="field">
-                      <label className="field-label" style={{ fontSize: '0.75rem' }}>👥 {t.groupSize}</label>
-                      <div className="input-wrap">
-                        <span className="input-icon">🔢</span>
-                        <input
-                          type="number"
-                          min="2"
-                          max="100"
-                          className="input-field"
-                          value={teamSize}
-                          onChange={(e) => setTeamSize(e.target.value)}
-                          style={{ padding: '0.4rem 0.6rem 0.4rem 2.2rem', fontSize: '0.8rem' }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="field">
-                      <label className="field-label" style={{ fontSize: '0.75rem' }}>{t.email}</label>
-                      <div className="input-wrap">
-                        <span className="input-icon">✉</span>
-                        <input
-                          type="email"
-                          className="input-field"
-                          placeholder="pro@skillora.cm"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          style={{ padding: '0.4rem 0.6rem 0.4rem 2.2rem', fontSize: '0.8rem' }}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="field">
-                      <label className="field-label" style={{ fontSize: '0.75rem' }}>{t.password}</label>
-                      <div className="input-wrap">
-                        <span className="input-icon">🔒</span>
-                        <input
-                          type={showPass ? 'text' : 'password'}
-                          className="input-field"
-                          placeholder="Min 8 chars"
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          style={{ padding: '0.4rem 2.2rem 0.4rem 2.2rem', fontSize: '0.8rem' }}
-                          required
-                        />
-                        <button type="button" className="pass-toggle" onClick={() => setShowPass(!showPass)}>
-                          {showPass ? '🙈' : '👁'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Inline Compact Verification Notice */}
-                <div className="compact-notice-banner" style={{ background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--border-gold)' }}>
-                  <p style={{ fontSize: '0.72rem', color: 'var(--gold-light)', margin: 0 }}>
-                    💡 <strong>{lang === 'fr' ? 'Vérification Optionnelle :' : 'Optional Verification:'}</strong> {lang === 'fr' ? 'Passez les étapes pour décrocher le Badge (✓) ou commencez direct.' : 'Complete steps to get Verified Badge (✓) or skip to start right away.'}
-                  </p>
-                </div>
-
-                {/* Side-by-Side Action Buttons */}
-                <div className="compact-action-row">
-                  <button type="button" className="btn-outline flex-1" onClick={handleSkipVerification} disabled={isSubmitting}>
-                    {isSubmitting ? (lang === 'fr' ? 'Création...' : 'Creating...') : `⏩ ${lang === 'fr' ? 'Ignorer & Commencer' : 'Skip & Start'}`}
-                  </button>
-                  <button type="button" className="submit-btn flex-1" style={{ marginTop: 0 }} onClick={handleStartVerification} disabled={isSubmitting}>
-                    🛡️ {lang === 'fr' ? 'Vérification IA →' : 'Start Verification →'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 2: TRADE SEARCH & BEPC LEVEL AI QUIZ */}
-            {wizardStep === 2 && (
-              <div>
-                <div className="field">
-                  <label className="field-label">🔎 Rechercher & Sélectionner votre Métier / Spécialité</label>
-                  <div className="input-wrap">
-                    <span className="input-icon">🔍</span>
-                    <input
+                  <>
+                    <AuthField
+                      id="artisan-group"
+                      label={tr("Nom de l'atelier", 'Workshop name')}
                       type="text"
-                      className="input-field"
-                      placeholder="Tapez pour rechercher (ex: Électricien, Plombier, Menuisier, Climatiseur...)"
-                      value={profession}
-                      onChange={(e) => setProfession(e.target.value)}
+                      placeholder="Atelier Élite Bâtiment"
+                      value={groupName}
+                      onChange={(e) => setGroupName(e.target.value)}
+                      disabled={locked}
+                      required
                     />
-                  </div>
-                </div>
-
-
-
-                <div className="form-two-col">
-                  <div className="field">
-                    <label className="field-label">Années d'Expérience</label>
-                    <div className="input-wrap">
-                      <span className="input-icon">📋</span>
-                      <input
-                        type="number"
-                        className="input-field"
-                        value={experience}
-                        onChange={(e) => setExperience(e.target.value)}
-                        min="1"
-                        max="60"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="field">
-                    <label className="field-label">Ville / Région au Cameroun</label>
-                    <div className="input-wrap">
-                      <span className="input-icon">📍</span>
-                      <input
-                        type="text"
-                        className="input-field"
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        placeholder="e.g. Douala & Yaoundé"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Step 2: Presentation Video Capture (Live Camera) */}
-                <VideoCapture
-                  lang={lang}
-                  triggerToast={triggerToast}
-                  maxDuration={60}
-                  onUploadSuccess={(url) => setVideoUrl(url)}
+                    <AuthField
+                      id="artisan-lead"
+                      label={tr('Responsable', 'Lead contact')}
+                      type="text"
+                      autoComplete="name"
+                      placeholder="Jean-Paul Kamga"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      disabled={locked}
+                    />
+                    <AuthField
+                      id="artisan-size"
+                      label={tr("Nombre d'artisans", 'Team size')}
+                      type="number"
+                      min="2"
+                      max="500"
+                      value={teamSize}
+                      onChange={(e) => setTeamSize(e.target.value)}
+                      disabled={locked}
+                    />
+                    <AuthField
+                      id="artisan-reg"
+                      label={tr('N° RCCM / NIU (facultatif)', 'Registration no. (optional)')}
+                      type="text"
+                      placeholder="RC/DLA/2024/B/1234"
+                      value={regNum}
+                      onChange={(e) => setRegNum(e.target.value)}
+                      disabled={locked}
+                    />
+                  </>
+                )}
+                <AuthField
+                  id="artisan-signup-email"
+                  label={tr('E-mail', 'Email')}
+                  type="email"
+                  autoComplete="email"
+                  placeholder="pro@exemple.cm"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={locked}
+                  required
                 />
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginTop: '1.5rem' }}>
-                  <button type="button" className="btn-outline" onClick={() => setWizardStep(1)}>
-                    {t.backStep}
-                  </button>
-                  <button type="button" className="submit-btn" style={{ marginTop: 0 }} onClick={handleSaveTrade} disabled={isSubmitting}>
-                    {videoUrl ? '✓ ' : ''}🧠 {tr('Étape 3 : Quiz Technique IA →', 'Step 3: AI Technical Quiz →')}
-                  </button>
+                <AuthField
+                  id="artisan-phone"
+                  label={tr('Téléphone (paiements Mobile Money)', 'Phone (Mobile Money payouts)')}
+                  type="tel"
+                  autoComplete="tel"
+                  placeholder="+237 6XX XX XX XX"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  disabled={locked}
+                  required
+                />
+                <div className={isSingle ? '' : 'full'}>
+                  {passwordField}
+                  {!locked && <StrengthMeter {...strength} />}
                 </div>
               </div>
-            )}
 
-            {/* STEP 3: AI TECHNICAL MCQ QUIZ ASSESSMENT (Automated 10 MCQs) */}
-            {wizardStep === 3 && (
-              <div>
+              {locked ? (
+                <p className="auth2-note">✓ {tr('Compte créé. Continuez la vérification ou ouvrez votre espace.', 'Account created. Continue verification or open your workspace.')}</p>
+              ) : (
+                <p className="auth2-note">
+                  <strong>{tr('Vérification facultative :', 'Optional verification:')}</strong>{' '}
+                  {tr('commencez tout de suite, ou passez les 3 étapes suivantes pour obtenir le badge vérifié.', 'start right away, or complete the next 3 steps to earn the verified badge.')}
+                </p>
+              )}
+
+              <div className="auth2-actions">
+                <button type="button" className="auth2-btn ghost" onClick={handleSkipVerification} disabled={isSubmitting}>
+                  {tr('Commencer sans badge', 'Start without badge')}
+                </button>
+                <button type="submit" className="auth2-btn" disabled={isSubmitting}>
+                  {isSubmitting ? tr('Création…', 'Creating…') : tr('Vérifier mon profil →', 'Verify my profile →')}
+                </button>
+              </div>
+
+              <p className="auth2-bottom">
+                {tr('Déjà inscrit ?', 'Already registered?')}
+                <button type="button" className="auth2-link strong" onClick={() => setTab('login')}>
+                  {tr('Se connecter', 'Sign in')}
+                </button>
+              </p>
+            </form>
+          )}
+
+          {/* STEP 2 — TRADE & VIDEO */}
+          {wizardStep === 2 && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveTrade();
+              }}
+            >
+              {stepHeader(tr('Votre métier', 'Your trade'), tr('Ces informations apparaissent sur votre profil public.', 'This appears on your public profile.'))}
+
+              <AuthField
+                id="artisan-trade"
+                label={tr('Métier / spécialité', 'Trade / specialty')}
+                type="text"
+                list="artisan-trades"
+                placeholder={tr('ex : Électricien, Plombier, Menuisier…', 'e.g. Electrician, Plumber, Carpenter…')}
+                value={profession}
+                onChange={(e) => setProfession(e.target.value)}
+                required
+              />
+              <datalist id="artisan-trades">
+                {TRADES.map((trade) => (
+                  <option key={trade} value={trade} />
+                ))}
+              </datalist>
+
+              <div className="auth2-grid">
+                <AuthField
+                  id="artisan-exp"
+                  label={tr("Années d'expérience", 'Years of experience')}
+                  type="number"
+                  min="0"
+                  max="60"
+                  placeholder="5"
+                  value={experience}
+                  onChange={(e) => setExperience(e.target.value)}
+                />
+                <AuthField
+                  id="artisan-city"
+                  label={tr("Ville / zone d'intervention", 'City / service area')}
+                  type="text"
+                  placeholder="Douala, Akwa"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                />
+              </div>
+
+              <div className="auth2-label-row"><label>{tr('Vidéo de présentation (facultatif, 60 s max)', 'Presentation video (optional, 60 s max)')}</label></div>
+              <div className="auth2-embed">
+                <VideoCapture lang={lang} triggerToast={triggerToast} maxDuration={60} onUploadSuccess={(url) => setVideoUrl(url)} />
+              </div>
+
+              <div className="auth2-actions">
+                <button type="button" className="auth2-btn ghost" onClick={() => setWizardStep(1)}>
+                  ← {tr('Retour', 'Back')}
+                </button>
+                <button type="submit" className="auth2-btn" disabled={isSubmitting}>
+                  {isSubmitting ? tr('Enregistrement…', 'Saving…') : tr('Continuer vers le quiz →', 'Continue to quiz →')}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* STEP 3 — QUIZ */}
+          {wizardStep === 3 && (
+            <div>
+              {stepHeader(tr('Quiz technique', 'Technical quiz'), tr('10 questions sur votre métier, 30 secondes chacune. 60 % pour obtenir le badge.', '10 questions about your trade, 30 seconds each. 60% earns the badge.'))}
+              <div className="auth2-embed">
                 <VerificationQuiz
                   artisan={account}
                   profession={profession}
@@ -687,171 +606,65 @@ export default function ArtisanAuth({ onSwitchToClient, onBackToLanding, onLogin
                   onResult={(data) => setQuizResult(data)}
                   onComplete={() => setWizardStep(4)}
                 />
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginTop: '1.25rem' }}>
-                  <button type="button" className="btn-outline" onClick={() => setWizardStep(2)}>
-                    {t.backStep}
-                  </button>
-                  <button
-                    type="button"
-                    className="submit-btn"
-                    style={{ marginTop: 0 }}
-                    onClick={() => setWizardStep(4)}
-                  >
-                    {isQuizPassed
-                      ? (lang === 'fr' ? 'Étape 4 : Documents & Coffre-Fort (Quiz Validé ✓) →' : 'Step 4: Documents & Vault (Passed ✓) →')
-                      : (lang === 'fr' ? 'Passer à l\'Étape 4 (Sans Badge) →' : 'Skip to Step 4 (No Badge) →')}
-                  </button>
-                </div>
               </div>
-            )}
-
-            {/* STEP 4: PROFESSIONAL DOCUMENTS & DECISION (Section 4 Step 4 & 5) */}
-            {wizardStep === 4 && (
-              <div>
-                {/* 1. ID Card / Passport (Gallery or Camera) */}
-                <div className="kyc-upload-card">
-                  <div className="kyc-card-header">
-                    <span className="kyc-icon">🪪</span>
-                    <div>
-                      <h4 className="kyc-title">
-                        {artisanType === 'SINGLE' ? '1. CNI / Passeport (Pièce d\'Identité)' : '1. Registre RCCM / NIU de l\'Atelier'}
-                      </h4>
-                      <p className="kyc-desc">Prenez en photo recto/verso ou sélectionnez depuis vos fichiers</p>
-                    </div>
-                  </div>
-                  <div className="kyc-picker-action-row">
-                    <ImageCapturePicker
-                      value={idCardPhoto}
-                      onChange={(url) => setIdCardPhoto(url)}
-                      triggerToast={triggerToast}
-                      label="Pièce d'Identité / CNI"
-                      aspectRatio="free"
-                      buttonText={idCardPhoto ? "🔄 Modifier la photo CNI" : "📁 Galerie ou 📷 Photo CNI"}
-                    />
-                    {idCardPhoto && (
-                      <div className="kyc-thumb-wrap">
-                        <img src={idCardPhoto} alt="CNI" className="kyc-preview-img" />
-                        <span className="kyc-check-tag">✓ {tr('Envoyé', 'Uploaded')}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 2. Live Selfie Camera Face Check */}
-                <div className="kyc-upload-card">
-                  <div className="kyc-card-header">
-                    <span className="kyc-icon">🤳</span>
-                    <div>
-                      <h4 className="kyc-title">2. Selfie de Contrôle en Direct (Biométrie Faciale)</h4>
-                      <p className="kyc-desc">Prenez un selfie net de votre visage pour valider la concordance avec la CNI</p>
-                    </div>
-                  </div>
-                  <div className="kyc-picker-action-row">
-                    <ImageCapturePicker
-                      value={selfiePhoto}
-                      onChange={(url) => setSelfiePhoto(url)}
-                      triggerToast={triggerToast}
-                      label="Selfie en direct"
-                      aspectRatio="square"
-                      buttonText={selfiePhoto ? "🔄 Reprendre le Selfie" : "📷 Prendre un Selfie en Direct"}
-                    />
-                    {selfiePhoto && (
-                      <div className="kyc-thumb-wrap">
-                        <img src={selfiePhoto} alt="Selfie" className="kyc-preview-img round" />
-                        <span className="kyc-check-tag">✓ {tr('Envoyé', 'Uploaded')}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 3. Diplomas / Certificates / Portfolio */}
-                <div className="kyc-upload-card">
-                  <div className="kyc-card-header">
-                    <span className="kyc-icon">📄</span>
-                    <div>
-                      <h4 className="kyc-title">
-                        {artisanType === 'SINGLE' ? '3. Diplôme, Attestation ou Certificat de Qualification' : '3. Agréments Techniques & Agréations'}
-                      </h4>
-                      <p className="kyc-desc">Photo ou scan de vos attestations de formation</p>
-                    </div>
-                  </div>
-                  <div className="kyc-picker-action-row">
-                    <ImageCapturePicker
-                      value={diplomaPhoto}
-                      onChange={(url) => setDiplomaPhoto(url)}
-                      triggerToast={triggerToast}
-                      label="Certificat / Diplôme"
-                      aspectRatio="free"
-                      buttonText={diplomaPhoto ? "🔄 Modifier le document" : "📁 Galerie ou 📷 Photo Diplôme"}
-                    />
-                    {diplomaPhoto && (
-                      <div className="kyc-thumb-wrap">
-                        <img src={diplomaPhoto} alt="Diplôme" className="kyc-preview-img" />
-                        <span className="kyc-check-tag">✓ {tr('Envoyé', 'Uploaded')}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Verification Decision Summary Box (Section 4 Step 5) */}
-                <div style={{ background: 'rgba(212, 175, 55, 0.08)', border: '1px solid var(--border-gold)', padding: '1.25rem', borderRadius: '12px', margin: '1.25rem 0' }}>
-                  <h4 style={{ color: 'var(--gold-light)', fontSize: '0.95rem', marginBottom: '0.6rem' }}>
-                    📊 {tr('Récapitulatif de votre vérification', 'Your verification summary')}
-                  </h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    <div>
-                      • {tr('Quiz technique', 'Technical quiz')} :{' '}
-                      <strong style={{ color: isQuizPassed ? 'var(--artisan-accent)' : '#fff' }}>
-                        {quizResult ? `${quizResult.scorePercent}% ${isQuizPassed ? '✓' : tr('(échoué)', '(failed)')}` : tr('Non passé', 'Not taken')}
-                      </strong>
-                    </div>
-                    <div>
-                      • {tr('Vidéo de présentation', 'Presentation video')} :{' '}
-                      <strong style={{ color: '#fff' }}>{videoUrl ? tr('Envoyée', 'Uploaded') : tr('Non fournie', 'Not provided')}</strong>
-                    </div>
-                    <div>
-                      • {tr('Pièce & selfie', 'ID & selfie')} :{' '}
-                      <strong style={{ color: '#fff' }}>
-                        {idCardPhoto && selfiePhoto ? tr("Envoyés — examen par l'équipe", 'Uploaded — team review') : tr('En attente', 'Pending')}
-                      </strong>
-                    </div>
-                    <div>
-                      • {tr('Badge', 'Badge')} :{' '}
-                      <strong style={{ color: isQuizPassed ? 'var(--artisan-accent)' : '#fff' }}>
-                        {isQuizPassed ? tr('Vérifié ✓', 'Verified ✓') : tr('Non vérifié', 'Not verified')}
-                      </strong>
-                    </div>
-                  </div>
-                  {!quizResult?.verificationId && (idCardPhoto || selfiePhoto || diplomaPhoto) && (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.6rem' }}>
-                      ℹ️ {tr('Passez le quiz (étape 3) pour joindre ces documents à votre dossier de vérification.', 'Take the quiz (step 3) to attach these documents to your verification file.')}
-                    </p>
-                  )}
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem' }}>
-                  <button type="button" className="btn-outline" onClick={() => setWizardStep(3)} disabled={isSubmitting}>
-                    {t.backStep}
-                  </button>
-                  <button type="button" className="submit-btn" style={{ marginTop: 0 }} onClick={handleCompleteVerification} disabled={isSubmitting}>
-                    {isSubmitting ? (lang === 'fr' ? 'Création et validation...' : 'Creating and verifying...') : tr('✓ Terminer & Ouvrir mon Espace Artisan →', '✓ Finish & Open My Artisan Hub →')}
-                  </button>
-                </div>
+              <div className="auth2-actions">
+                <button type="button" className="auth2-btn ghost" onClick={() => setWizardStep(2)}>
+                  ← {tr('Retour', 'Back')}
+                </button>
+                <button type="button" className="auth2-btn" onClick={() => setWizardStep(4)}>
+                  {isQuizPassed ? tr('Continuer vers les documents →', 'Continue to documents →') : tr('Passer cette étape →', 'Skip this step →')}
+                </button>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
 
-        <div className="switch-role-footer">
-          <span>{lang === 'fr' ? 'Vous cherchez plutôt à embaucher des artisans ?' : 'Looking to hire verified professionals instead?'}</span>
-          <span className="switch-role-link" onClick={onSwitchToClient}>
-            {lang === 'fr' ? 'Accéder à l\'Espace Client →' : 'Switch to Client Portal →'}
-          </span>
+          {/* STEP 4 — DOCUMENTS */}
+          {wizardStep === 4 && (
+            <div>
+              {stepHeader(tr('Vos documents', 'Your documents'), tr('Ils sont examinés par notre équipe et ne sont jamais affichés publiquement.', 'They are reviewed by our team and never shown publicly.'))}
+
+              <div className="auth2-kyc">
+                {kycCard(
+                  isSingle ? tr("Pièce d'identité", 'ID card / passport') : tr('Registre RCCM / NIU', 'Business registration'),
+                  tr('Recto verso, bien lisible', 'Front and back, clearly readable'),
+                  idCardPhoto, setIdCardPhoto, 'free', tr("Pièce d'identité", 'ID document')
+                )}
+                {kycCard(
+                  tr('Selfie', 'Selfie'),
+                  tr('Visage bien visible, pour comparer avec la pièce', 'Face clearly visible, to match your ID'),
+                  selfiePhoto, setSelfiePhoto, 'square', tr('Selfie', 'Selfie')
+                )}
+                {kycCard(
+                  isSingle ? tr('Diplôme / certificat', 'Diploma / certificate') : tr('Agréments', 'Approvals'),
+                  tr('Formation, attestation ou certification', 'Training, attestation or certification'),
+                  diplomaPhoto, setDiplomaPhoto, 'free', tr('Diplôme', 'Certificate')
+                )}
+              </div>
+
+              <div className="auth2-summary">
+                <div>{tr('Quiz technique', 'Technical quiz')} : <strong>{quizResult ? `${quizResult.scorePercent} % ${isQuizPassed ? '✓' : tr('(non réussi)', '(not passed)')}` : tr('non passé', 'not taken')}</strong></div>
+                <div>{tr('Vidéo', 'Video')} : <strong>{videoUrl ? tr('envoyée', 'uploaded') : tr('non fournie', 'not provided')}</strong></div>
+                <div>{tr('Documents', 'Documents')} : <strong>{[idCardPhoto, selfiePhoto, diplomaPhoto].filter(Boolean).length} / 3</strong></div>
+                <div>{tr('Badge', 'Badge')} : <strong>{isQuizPassed ? tr('vérifié ✓', 'verified ✓') : tr('non vérifié', 'not verified')}</strong></div>
+              </div>
+
+              {!quizResult?.verificationId && (idCardPhoto || selfiePhoto || diplomaPhoto) && (
+                <p className="auth2-note">ℹ️ {tr('Passez le quiz (étape 3) pour joindre ces documents à votre dossier de vérification.', 'Take the quiz (step 3) to attach these documents to your verification file.')}</p>
+              )}
+
+              <div className="auth2-actions">
+                <button type="button" className="auth2-btn ghost" onClick={() => setWizardStep(3)} disabled={isSubmitting}>
+                  ← {tr('Retour', 'Back')}
+                </button>
+                <button type="button" className="auth2-btn" onClick={handleCompleteVerification} disabled={isSubmitting}>
+                  {isSubmitting ? tr('Finalisation…', 'Finishing…') : tr('Terminer et ouvrir mon espace →', 'Finish & open my workspace →')}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
-      {/* Forgot Password Modal */}
       <ForgotPasswordModal
         isOpen={isForgotModalOpen}
         onClose={() => setIsForgotModalOpen(false)}
@@ -862,6 +675,6 @@ export default function ArtisanAuth({ onSwitchToClient, onBackToLanding, onLogin
           setPassword(resetPass);
         }}
       />
-    </div>
+    </AuthShell>
   );
 }

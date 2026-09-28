@@ -1,3 +1,4 @@
+const { safeRegex } = require("../utils/regex.util");
 const bcrypt = require("bcryptjs");
 const { signToken } = require("../utils/jwt.util");
 const {
@@ -12,6 +13,7 @@ const {
   VerificationQuestion,
   VerificationAnswer,
   VerificationDocument,
+  Payment,
 } = require("../models");
 
 // Admin Login
@@ -26,9 +28,13 @@ const adminLogin = async (req, res, next) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    // Audit trail: every admin sign-in attempt is written to the server log
+    const audit = (outcome) =>
+      console.info(`[ADMIN AUTH] ${new Date().toISOString()} ${outcome} email=${normalizedEmail} ip=${req.ip}`);
     const user = await User.findOne({ email: normalizedEmail }).select("+password");
 
     if (!user || user.role !== "ADMIN") {
+      audit("FAILED (unknown admin)");
       return res.status(401).json({
         success: false,
         message: "Invalid admin credentials.",
@@ -37,6 +43,7 @@ const adminLogin = async (req, res, next) => {
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      audit("FAILED (wrong password)");
       return res.status(401).json({
         success: false,
         message: "Invalid admin credentials.",
@@ -44,19 +51,20 @@ const adminLogin = async (req, res, next) => {
     }
 
     if (!user.isActive) {
+      audit("FAILED (account disabled)");
       return res.status(403).json({
         success: false,
         message: "Admin account is deactivated. Contact system owner.",
       });
     }
 
-    const token = signToken({
-      id: user._id.toString(),
-      email: user.email,
-      role: "ADMIN",
-      adminRole: "SUPER_ADMIN",
-    });
+    // Admin sessions are short-lived (default 2h) to limit the damage of a stolen token
+    const token = signToken(
+      { id: user._id.toString(), email: user.email, role: "ADMIN", adminRole: "SUPER_ADMIN" },
+      { expiresIn: process.env.ADMIN_JWT_EXPIRES_IN || "2h" }
+    );
 
+    audit("SUCCESS");
     return res.json({
       success: true,
       message: "Admin login successful.",
@@ -180,7 +188,7 @@ const globalSearch = async (req, res, next) => {
       });
     }
 
-    const reg = new RegExp(query, "i");
+    const reg = safeRegex(query);
 
     const users = await User.find({
       $or: [{ firstName: reg }, { lastName: reg }, { email: reg }, { location: reg }],
@@ -225,7 +233,7 @@ const getUsers = async (req, res, next) => {
     const query = {};
 
     if (search) {
-      const reg = new RegExp(search, "i");
+      const reg = safeRegex(search);
       query.$or = [{ firstName: reg }, { lastName: reg }, { email: reg }, { phone: reg }];
     }
 
@@ -363,7 +371,7 @@ const getProfessionals = async (req, res, next) => {
     const query = {};
 
     if (profession && profession !== "ALL") {
-      query.profession = new RegExp(profession, "i");
+      query.profession = safeRegex(profession);
     }
 
     if (verificationStatus && verificationStatus !== "ALL") {
@@ -371,7 +379,7 @@ const getProfessionals = async (req, res, next) => {
     }
 
     if (search) {
-      const reg = new RegExp(search, "i");
+      const reg = safeRegex(search);
       query.$or = [{ profession: reg }, { bio: reg }, { groupName: reg }];
     }
 
@@ -400,9 +408,13 @@ const getProfessionals = async (req, res, next) => {
 // Verification Requests Management
 const getVerificationRequests = async (req, res, next) => {
   try {
-    const status = (req.query.status || "").trim();
+    const status = (req.query.status || "REVIEW").trim();
     const query = {};
-    if (status && status !== "ALL") {
+    if (status === "REVIEW") {
+      // Verifications with identity documents still waiting for a human decision
+      const flagged = await VerificationDocument.distinct("verificationId", { reviewStatus: "FLAGGED_FOR_ADMIN" });
+      query._id = { $in: flagged };
+    } else if (status !== "ALL") {
       query.status = status;
     }
 
@@ -411,7 +423,8 @@ const getVerificationRequests = async (req, res, next) => {
         path: "artisanId",
         populate: { path: "userId", select: "firstName lastName email phone location profileImage isActive" },
       })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(100);
 
     const requestsWithFullAudit = await Promise.all(
       rawRequests.map(async (vReq) => {
@@ -451,7 +464,7 @@ const getVerificationRequests = async (req, res, next) => {
         return {
           ...vObj,
           documents,
-          videoUrl: videoUrl || "https://assets.mixkit.co/videos/preview/mixkit-man-working-on-his-laptop-308-large.mp4", // Fallback video stream for preview
+          videoUrl: videoUrl || null,
           mcqAnswers,
           mcqScore,
         };
@@ -493,15 +506,18 @@ const processVerification = async (req, res, next) => {
     verification.reviewedBy = req.admin ? `${req.admin.firstName} ${req.admin.lastName}` : "Super Admin";
     await verification.save();
 
+    // The documents of this file have now been reviewed by a human
+    await VerificationDocument.updateMany(
+      { verificationId: verification._id, reviewStatus: "FLAGGED_FOR_ADMIN" },
+      { reviewStatus: isApproved ? "APPROVED" : "REJECTED" }
+    );
+
     // Update Professional model
     const prof = await Professional.findById(verification.artisanId);
     if (prof) {
       prof.verificationStatus = newStatus;
       prof.verifiedBadge = isApproved;
       prof.verificationDate = isApproved ? new Date() : null;
-      if (isApproved && prof.verificationScore < 80) {
-        prof.verificationScore = 85;
-      }
       await prof.save();
     }
 
@@ -535,7 +551,7 @@ const getServices = async (req, res, next) => {
       query.categoryId = categoryId;
     }
     if (search) {
-      const reg = new RegExp(search, "i");
+      const reg = safeRegex(search);
       query.$or = [{ title: reg }, { description: reg }, { location: reg }];
     }
 
@@ -815,6 +831,142 @@ const sendNotification = async (req, res, next) => {
   }
 };
 
+// Dashboard overview: 6-month trends, money totals, user split and recent activity
+const getAdminOverview = async (req, res, next) => {
+  try {
+    const MONTHS = 6;
+    const now = new Date();
+    const since = new Date(now.getFullYear(), now.getMonth() - (MONTHS - 1), 1);
+    const monthKey = (d) => `${d.getFullYear()}-${d.getMonth() + 1}`;
+    const months = Array.from({ length: MONTHS }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (MONTHS - 1) + i, 1);
+      return { key: monthKey(d), year: d.getFullYear(), month: d.getMonth() + 1 };
+    });
+
+    const byMonth = async (Model, match = {}, sumField = null) => {
+      const rows = await Model.aggregate([
+        { $match: { ...match, createdAt: { $gte: since } } },
+        {
+          $group: {
+            _id: { y: { $year: "$createdAt" }, m: { $month: "$createdAt" } },
+            count: { $sum: 1 },
+            total: { $sum: sumField ? `$${sumField}` : 0 },
+          },
+        },
+      ]);
+      const map = Object.fromEntries(rows.map((r) => [`${r._id.y}-${r._id.m}`, r]));
+      return months.map((m) => ({ count: map[m.key]?.count || 0, total: map[m.key]?.total || 0 }));
+    };
+
+    const PAID = ["HELD", "PROCESSING", "SUCCESS"];
+
+    const [clients, artisans, requests, completed, payments] = await Promise.all([
+      byMonth(User, { role: "CUSTOMER" }),
+      byMonth(Professional),
+      byMonth(ServiceRequest),
+      byMonth(ServiceRequest, { status: "COMPLETED" }),
+      byMonth(Payment, { status: { $in: PAID } }, "amount"),
+    ]);
+
+    const moneyRows = await Payment.aggregate([
+      { $group: { _id: "$status", count: { $sum: 1 }, amount: { $sum: "$amount" }, fee: { $sum: "$platformFee" } } },
+    ]);
+    const money = Object.fromEntries(moneyRows.map((r) => [r._id, r]));
+    const sum = (statuses, field = "amount") => statuses.reduce((s, st) => s + (money[st]?.[field] || 0), 0);
+
+    const [clientCount, verifiedCount, artisanCount, adminCount] = await Promise.all([
+      User.countDocuments({ role: "CUSTOMER" }),
+      Professional.countDocuments({ verifiedBadge: true }),
+      Professional.countDocuments(),
+      User.countDocuments({ role: "ADMIN" }),
+    ]);
+
+    // Recent activity: newest events of each kind, merged by date
+    const [newUsers, newRequests, newReviews, newPayments] = await Promise.all([
+      User.find({}, "firstName lastName role createdAt").sort({ createdAt: -1 }).limit(5),
+      ServiceRequest.find({}, "description status createdAt customerId")
+        .populate("customerId", "firstName lastName")
+        .sort({ createdAt: -1 })
+        .limit(5),
+      Review.find({}, "rating createdAt customerId").populate("customerId", "firstName lastName").sort({ createdAt: -1 }).limit(5),
+      Payment.find({}, "amount status createdAt customerId").populate("customerId", "firstName lastName").sort({ createdAt: -1 }).limit(5),
+    ]);
+    const nameOf = (u) => (u ? `${u.firstName || ""} ${u.lastName || ""}`.trim() : "—");
+    const activity = [
+      ...newUsers.map((u) => ({ type: "USER", title: u.role === "PROFESSIONAL" ? "ARTISAN_SIGNUP" : u.role === "ADMIN" ? "ADMIN_CREATED" : "CLIENT_SIGNUP", who: nameOf(u), detail: null, at: u.createdAt })),
+      ...newRequests.map((r) => ({ type: "REQUEST", title: "REQUEST_CREATED", who: nameOf(r.customerId), detail: r.description, at: r.createdAt })),
+      ...newReviews.map((r) => ({ type: "REVIEW", title: "REVIEW_POSTED", who: nameOf(r.customerId), detail: `${r.rating}/5`, at: r.createdAt })),
+      ...newPayments.map((p) => ({ type: "PAYMENT", title: `PAYMENT_${p.status}`, who: nameOf(p.customerId), detail: p.amount, at: p.createdAt })),
+    ]
+      .sort((a, b) => new Date(b.at) - new Date(a.at))
+      .slice(0, 8);
+
+    return res.json({
+      success: true,
+      data: {
+        months: months.map((m) => ({ year: m.year, month: m.month })),
+        series: {
+          clients: clients.map((x) => x.count),
+          artisans: artisans.map((x) => x.count),
+          requests: requests.map((x) => x.count),
+          completed: completed.map((x) => x.count),
+          paymentVolume: payments.map((x) => x.total),
+        },
+        money: {
+          volume: sum(PAID),
+          platformFees: money.SUCCESS?.fee || 0,
+          inEscrow: sum(["HELD"]),
+          released: sum(["SUCCESS"]),
+          pending: sum(["PENDING"]),
+          needsAttention: (money.PAYOUT_FAILED?.count || 0) + (money.REFUND_PENDING?.count || 0),
+          payoutFailed: money.PAYOUT_FAILED?.count || 0,
+          refundPending: money.REFUND_PENDING?.count || 0,
+        },
+        usersByType: {
+          clients: clientCount,
+          verifiedArtisans: verifiedCount,
+          otherArtisans: Math.max(0, artisanCount - verifiedCount),
+          admins: adminCount,
+        },
+        activity,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Payments list for supervision (failed payouts and refunds need manual action)
+const getPayments = async (req, res, next) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 20));
+    const status = String(req.query.status || "").trim().toUpperCase();
+
+    const query = {};
+    if (status && status !== "ALL") {
+      query.status = status === "ATTENTION" ? { $in: ["PAYOUT_FAILED", "REFUND_PENDING"] } : status;
+    }
+
+    const total = await Payment.countDocuments(query);
+    const payments = await Payment.find(query)
+      .populate("customerId", "firstName lastName email phone")
+      .populate({ path: "professionalId", select: "profession userId", populate: { path: "userId", select: "firstName lastName phone" } })
+      .populate("serviceRequestId", "description status")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    return res.json({
+      success: true,
+      data: payments,
+      meta: { total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   adminLogin,
   adminGetMe,
@@ -838,4 +990,6 @@ module.exports = {
   deleteCategory,
   sendNotification,
   globalSearch,
+  getAdminOverview,
+  getPayments,
 };

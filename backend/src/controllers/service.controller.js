@@ -1,3 +1,4 @@
+const { safeRegex } = require("../utils/regex.util");
 const { Service, Professional, User, Category } = require("../models");
 
 const getAllServices = async (req, res, next) => {
@@ -9,7 +10,7 @@ const getAllServices = async (req, res, next) => {
     if (professionalId) query.professionalId = professionalId;
 
     if (search) {
-      const reg = new RegExp(search, "i");
+      const reg = safeRegex(search);
       query.$or = [{ title: reg }, { description: reg }, { location: reg }];
     }
 

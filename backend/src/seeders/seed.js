@@ -1,4 +1,10 @@
 require("dotenv").config();
+
+// Demo data only: the demo accounts share a public password.
+if (process.env.NODE_ENV === "production") {
+  console.error("✗ Refusing to seed demo data in production.");
+  process.exit(1);
+}
 const bcrypt = require("bcryptjs");
 const { connectDB } = require("../config/database");
 const { User, Professional, Category, Service, ServiceRequest, Review, Notification } = require("../models");
@@ -362,21 +368,7 @@ const seedDatabase = async () => {
 
     const hashedPassword = await bcrypt.hash("Password123!", 10);
 
-    // 2. Seed Admin User
-    const existingAdmin = await User.findOne({ email: "admin@skillora.com" });
-    if (!existingAdmin) {
-      await User.create({
-        firstName: "System",
-        lastName: "Administrator",
-        email: "admin@skillora.com",
-        phone: "+237600000000",
-        password: hashedPassword,
-        role: "ADMIN",
-        location: "Yaoundé, Centre",
-        latitude: 3.888,
-        longitude: 11.517,
-      });
-    }
+    // Admins are never seeded: create them with `npm run admin -- create` (strong password required).
 
     // 3. Seed Customer User
     let customerUser = await User.findOne({ email: "customer@skillora.cm" });

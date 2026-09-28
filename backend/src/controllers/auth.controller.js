@@ -187,6 +187,14 @@ const login = async (req, res, next) => {
       });
     }
 
+    // Admins must use the admin portal (stricter rate limit, short-lived session)
+    if (user.role === "ADMIN") {
+      return res.status(403).json({
+        success: false,
+        message: "Administrator accounts must sign in through the admin portal.",
+      });
+    }
+
     let professionalProfile = null;
     if (user.role === "PROFESSIONAL") {
       professionalProfile = await Professional.findOne({ userId: user._id });

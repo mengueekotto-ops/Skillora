@@ -777,7 +777,7 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '8px',
-    background: '#1e293b',
+    background: '#183526',
     color: '#f87171',
     border: '1px solid rgba(239, 68, 68, 0.5)',
     padding: '0.65rem 1.4rem',

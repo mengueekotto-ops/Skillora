@@ -1,13 +1,13 @@
 :root {
-  --text: #334155;
-  --text-h: #0f172a;
+  --text: #2c3a32;
+  --text-h: #13201a;
   --bg: #f8fafc;
   --border: #e2e8f0;
   --code-bg: #f1f5f9;
-  --accent: #2563eb;
-  --accent-purple: #7c3aed;
-  --accent-bg: rgba(37, 99, 235, 0.08);
-  --accent-border: rgba(37, 99, 235, 0.3);
+  --accent: #1c8a45;
+  --accent-purple: #22a04b;
+  --accent-bg: rgba(28, 138, 69, 0.08);
+  --accent-border: rgba(28, 138, 69, 0.3);
   --social-bg: rgba(241, 245, 249, 0.8);
   --shadow:
     rgba(0, 0, 0, 0.05) 0 10px 15px -3px, rgba(0, 0, 0, 0.03) 0 4px 6px -2px;
@@ -34,9 +34,9 @@
 [data-theme="dark"], html.dark, body.dark {
   --text: #e2e8f0;
   --text-h: #ffffff;
-  --bg: #0b0f19;
+  --bg: #050c08;
   --border: rgba(255, 255, 255, 0.1);
-  --code-bg: #1e293b;
+  --code-bg: #183526;
   color-scheme: dark;
   color: var(--text);
   background: var(--bg);

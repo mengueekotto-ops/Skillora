@@ -97,7 +97,7 @@ backend/
     routes/        Express routers mounted under /api
     services/      AI, DigiPay, escrow payouts, recommendations, trust levels
     utils/         JWT, ownership checks, distance
-    scripts/       createNewAdmin.js, seedAdmin.js
+    scripts/       admin.js (create / list / disable administrators)
     seeders/       Demo data
   tests/           End-to-end API tests
 frontend/Marketplace/
@@ -126,14 +126,19 @@ npm run dev                 # http://localhost:5173 (proxies /api to :5000)
 
 Optional demo data: `cd backend && npm run seed`.
 
-### Creating an admin
+### Administrators
+
+Admins can only be created from the server, never from the website:
 
 ```bash
 cd backend
-node src/scripts/createNewAdmin.js
+npm run admin -- create --email you@your-domain.cm --first Juan --last Mengue   # password typed at a hidden prompt
+npm run admin -- list
+npm run admin -- password --email you@your-domain.cm
+npm run admin -- disable --email old-admin@your-domain.cm
 ```
 
-Change the default password immediately after the first login.
+Passwords need 12+ characters with upper and lower case, a digit and a symbol. Admins sign in from **Footer → Administration**; the public login refuses admin accounts. The demo seeder never creates admins and refuses to run in production.
 
 ---
 
@@ -172,7 +177,9 @@ npm run test:e2e
 
 ## Security model
 
-- Public sign-up can only create `CUSTOMER` or `PROFESSIONAL` accounts.
+- Public sign-up can only create `CUSTOMER` or `PROFESSIONAL` accounts; admins are created with `npm run admin` and must use the admin portal.
+- Login, admin login, sign-up and password reset are rate-limited. Admin sessions expire after 2 hours, and every admin sign-in attempt is written to the server log (`[ADMIN AUTH]`).
+- Search inputs are escaped before reaching the database.
 - Passwords and reset codes are never returned by the API. Reset codes are hashed, expire after 15 minutes and allow 5 attempts. *Delivery by email/SMS still has to be connected; in development the code is printed in the server console.*
 - Every write route checks ownership: users can only act on their own profile, requests, payments, verifications and reviews; admins can act on everything.
 - The quiz answers are stored server-side; the browser never receives them.

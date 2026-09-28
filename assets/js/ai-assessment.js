@@ -865,7 +865,8 @@ DOMAIN_QUESTION_BANKS["painter & decorator"] = DOMAIN_QUESTION_BANKS["painter"];
 DOMAIN_QUESTION_BANKS["tailor / textile"] = DOMAIN_QUESTION_BANKS["carpenter"];
 
 const OPENROUTER_CONFIG = {
-    apiKey: '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',
+    // Never put API keys in browser code. Leave empty: the built-in domain question banks are used.
+    apiKey: '',
     model: 'google/gemini-2.0-flash-001'
 };
 
@@ -969,6 +970,10 @@ Return ONLY a JSON object:
     }
   ]
 }`;
+
+        if (!OPENROUTER_CONFIG.apiKey) {
+            throw new Error('No AI key configured in the browser; using domain question bank');
+        }
 
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',

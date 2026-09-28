@@ -142,11 +142,14 @@ async function analyzeDoc(req, res) {
  */
 async function handleRecommend(req, res) {
   try {
-    const { query = "", categoryId = null, location = "", verifiedOnly = false, limit = 10 } = req.body || {};
+    const { query = "", categoryId = null, location = "", latitude = null, longitude = null, maxDistance = null, verifiedOnly = false, limit = 10 } = req.body || {};
     const recommendations = await recommendProfessionals({
       query,
       categoryId,
       location,
+      latitude,
+      longitude,
+      maxDistance,
       verifiedOnly,
       limit: Number(limit) || 10,
     });

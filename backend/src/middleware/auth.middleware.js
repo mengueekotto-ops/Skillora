@@ -1,5 +1,5 @@
-const jwt = require("jsonwebtoken");
-const { User, Professional } = require("../models");
+const { User } = require("../models");
+const { verifyToken } = require("../utils/jwt.util");
 
 const authenticateToken = async (req, res, next) => {
   try {
@@ -12,7 +12,7 @@ const authenticateToken = async (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "default_jwt_secret");
+    const decoded = verifyToken(token);
 
     const user = await User.findById(decoded.id);
 

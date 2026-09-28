@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { api } from '../api';
 
 export function HoloToast({ toast, onClose }) {
   useEffect(() => {
@@ -136,104 +137,31 @@ export function AiAssistantModal({ isOpen, onClose, lang = 'fr', triggerToast })
     setProcState('THINKING');
 
     console.log("🚀 [Skillora AI] Initiating API request for prompt:", userText, "| Service Intent:", isServiceIntent);
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
-    const apiKey = import.meta.env.VITE_AI_API_KEY || "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";
-
     let aiGeneratedText = "";
     let isFromLiveApi = false;
     let apiSourceLabel = "";
 
-    // Attempt 1: Call Backend API Endpoint /api/ai/chat
+    // The AI key lives only on the server; the browser always goes through /api/ai/chat
     try {
       setProcState('SEARCHING');
-      console.log(`🌐 [Skillora AI] Sending POST request to backend endpoint: ${backendUrl}/api/ai/chat`);
-
-      const response = await fetch(`${backendUrl}/api/ai/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const data = await api('/ai/chat', {
+        method: 'POST',
+        body: {
           message: userText,
           location: location,
           lang: lang,
-          history: messages.slice(-4)
-        })
+          history: messages.slice(-4),
+        },
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log("✅ [Skillora AI] Backend API Response Received:", data);
-        if (data.success && data.data && data.data.text) {
-          aiGeneratedText = data.data.text;
-          isFromLiveApi = true;
-          apiSourceLabel = data.data.source === "openrouter_api" ? "OpenRouter API (Backend)" : "Backend API";
-        }
-      } else {
-        const errorText = await response.text();
-        console.warn(`⚠️ [Skillora AI] Backend API returned HTTP ${response.status}:`, errorText);
+      if (data.data && data.data.text) {
+        aiGeneratedText = data.data.text;
+        isFromLiveApi = data.data.source === "openrouter_api";
+        apiSourceLabel = isFromLiveApi ? "Skillora AI" : "Skillora";
       }
-    } catch (backendErr) {
-      console.error("❌ [Skillora AI Error] Failed to connect to Backend Server:", backendErr.message);
+    } catch (err) {
+      console.warn("⚠️ [Skillora AI] Assistant request failed:", err.message);
     }
 
-    // Attempt 2: Direct OpenRouter API Call if Backend API didn't return text
-    if (!aiGeneratedText) {
-      try {
-        console.log("🌐 [Skillora AI] Attempting Direct OpenRouter API Call with VITE_AI_API_KEY...");
-        const openRouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`,
-            "HTTP-Referer": window.location.origin,
-            "X-Title": "Skillora Assistant Platform",
-          },
-          body: JSON.stringify({
-            model: "minimax/minimax-m3:free",
-            messages: [
-              {
-                role: "system",
-                content: `Tu es "Skillora Assistant", l'assistant officiel de la plateforme Skillora à Yaoundé.
-
-RÔLE ET TON :
-- Tu es accueillant, professionnel, clair et humain.
-- Tu réponds de manière fluide et naturelle aux salutations (ex: "Bonjour", "Comment vas-tu ?").
-- Tu structures tes réponses avec du Markdown (gras, listes à puces, emojis) pour que ce soit facile à lire.
-
-RÈGLES DE RÉPONSE :
-1. Si l'utilisateur pose une question sur Skillora, explique clairement les services (recherche d'artisans certifiés, avis clients, contact direct, garantie séquestre).
-2. Si l'utilisateur cherche un service précis (ex: plombier, électricien), demande des précisions si nécessaire ou propose directement la catégorie adaptée.
-3. Termine souvent par une question d'engagement courte (ex: "Quel service recherchez-vous aujourd'hui sur Skillora ?").`
-              },
-              ...messages.slice(-4).map(m => ({
-                role: m.sender === 'user' ? 'user' : 'assistant',
-                content: m.text
-              })),
-              { role: "user", content: userText }
-            ],
-            temperature: 0.6
-          })
-        });
-
-        if (openRouterRes.ok) {
-          const openData = await openRouterRes.json();
-          console.log("✅ [Skillora AI] Direct OpenRouter API Response Received:", openData);
-          if (openData.choices && openData.choices[0] && openData.choices[0].message) {
-            aiGeneratedText = openData.choices[0].message.content;
-            isFromLiveApi = true;
-            apiSourceLabel = "OpenRouter Direct API";
-          }
-        } else {
-          const errBody = await openRouterRes.text();
-          console.error(`❌ [Skillora AI Error] OpenRouter API ${openRouterRes.status}:`, errBody);
-        }
-      } catch (directErr) {
-        console.error("❌ [Skillora AI Exception] Direct API fetch failed:", directErr);
-      }
-    }
-
-    // Fallback if APIs are unreachable
     if (!aiGeneratedText) {
       console.warn("⚠️ [Skillora AI Warning] Using fallback response mode due to network/API error.");
       const lowerText = userText.toLowerCase().trim();

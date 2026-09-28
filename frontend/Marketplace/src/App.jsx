@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 import { translations } from './translations';
 import Navbar from './components/Navbar';
@@ -7,11 +7,21 @@ import ClientAuth from './components/ClientAuth';
 import ArtisanAuth from './components/ArtisanAuth';
 import ClientDashboard from './components/ClientDashboard';
 import ArtisanDashboard from './components/ArtisanDashboard';
+import AdminDashboard from './components/AdminDashboard';
+import AdminAuth from './components/AdminAuth';
 import WalletPaymentModal from './components/WalletPaymentModal';
 import SettingsModal from './components/SettingsModal';
 import HoloToast, { AiAssistantModal } from './components/HoloToast';
+import { api, clearSession, getToken, normalizeUser } from './api';
+
+const screenForRole = (role) =>
+  role === 'ADMIN' ? 'admin-dashboard' : role === 'PROFESSIONAL' ? 'artisan-dashboard' : 'client-dashboard';
 
 function App() {
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem('skillora-theme') || 'light'; } catch { return 'light'; }
+  });
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [lang, setLang] = useState('fr'); // Default to French, seamlessly switchable to English
   const [screen, setScreen] = useState('role-selection'); // 'role-selection' | 'client-auth' | 'artisan-auth' | 'client-dashboard' | 'artisan-dashboard' | 'artisan-detail'
   const [selectedArtisan, setSelectedArtisan] = useState(null);
@@ -20,16 +30,41 @@ function App() {
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState({
-    name: 'Emmanuel Ngu',
-    email: 'emmanuel.pro@skillora.cm',
-    phone: '+237 675 42 10 99',
-    role: 'PROFESSIONAL',
-    artisanType: 'Single Artisan (Master Specialist)',
-    city: 'Yaoundé (Bastos)',
-    bio: 'Certified Master Artisan with 8+ years experience in electrical engineering, high-voltage systems and solar energy in Cameroon.'
-  });
+  const [authTab, setAuthTab] = useState('login'); // 'login' | 'signup'
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isRestoringSession, setIsRestoringSession] = useState(() => Boolean(getToken()));
   const [toast, setToast] = useState({ visible: false, msg: '', icon: '✓' });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.body.classList.toggle('dark', theme === 'dark');
+    try { localStorage.setItem('skillora-theme', theme); } catch { /* storage unavailable */ }
+  }, [theme]);
+
+  // Restore the logged-in session after a page refresh
+  useEffect(() => {
+    if (!getToken()) return;
+    api('/auth/me')
+      .then((res) => {
+        const user = normalizeUser(res.data.user);
+        setCurrentUser(user);
+        setScreen(screenForRole(user.role));
+      })
+      .catch(() => clearSession())
+      .finally(() => setIsRestoringSession(false));
+  }, []);
+
+  // Any API call that gets 401 (expired token) logs the user out
+  useEffect(() => {
+    const onUnauthorized = () => {
+      clearSession();
+      setCurrentUser(null);
+      setScreen('role-selection');
+      setToast({ visible: true, msg: 'Session expirée, veuillez vous reconnecter. / Session expired.', icon: '🔒' });
+    };
+    window.addEventListener('skillora:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('skillora:unauthorized', onUnauthorized);
+  }, []);
 
   const t = translations[lang] || translations.en;
 
@@ -41,15 +76,13 @@ function App() {
     setToast((prev) => ({ ...prev, visible: false }));
   };
 
-  const handleClientLoginSuccess = (user) => {
+  // Both auth screens hand back a normalized user; route by the role the server returned
+  const handleLoginSuccess = (user) => {
     setCurrentUser(user);
-    setScreen('client-dashboard');
+    setScreen(screenForRole(user?.role));
   };
-
-  const handleArtisanLoginSuccess = (user) => {
-    setCurrentUser(user);
-    setScreen('artisan-dashboard');
-  };
+  const handleClientLoginSuccess = handleLoginSuccess;
+  const handleArtisanLoginSuccess = handleLoginSuccess;
 
   const handleViewArtisanProfile = (artisan) => {
     setSelectedArtisan(artisan);
@@ -64,12 +97,41 @@ function App() {
   };
 
   const handleLogout = () => {
+    api('/auth/logout', { method: 'POST' }).catch(() => {});
+    clearSession();
+    setCurrentUser(null);
+    setWalletBalance(0);
     setIsSettingsOpen(false);
     setSelectedArtisan(null);
     setSelectedArtisanId(null);
     setScreen('role-selection');
     triggerToast(lang === 'fr' ? 'Déconnexion effectuée avec succès' : 'Logged out successfully', '👋');
   };
+
+  // Navbar wallet badge: earnings for artisans, money held in escrow for clients
+  const refreshWallet = React.useCallback(async () => {
+    if (!currentUser || currentUser.role === 'ADMIN') return;
+    try {
+      const res = await api('/payments/history');
+      if (currentUser.role === 'PROFESSIONAL') {
+        setWalletBalance(Number(res.walletBalance || 0));
+      } else {
+        setWalletBalance((res.data || []).filter((p) => p.status === 'HELD').reduce((s, p) => s + p.amount, 0));
+      }
+    } catch { /* badge keeps its last value */ }
+  }, [currentUser]);
+
+  useEffect(() => {
+    refreshWallet();
+  }, [refreshWallet, screen]);
+
+  if (isRestoringSession) {
+    return (
+      <div className="app-shell" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: 'var(--text-dim)' }}>💎 Skillora…</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -94,9 +156,10 @@ function App() {
         isOpen={isWalletOpen}
         onClose={() => setIsWalletOpen(false)}
         t={t}
+        lang={lang}
+        currentUser={currentUser}
         walletBalance={walletBalance}
-        setWalletBalance={setWalletBalance}
-        triggerToast={triggerToast}
+        onRefresh={refreshWallet}
       />
 
       {/* Settings Modal (Profile Info, Edit Profile, Legal, Logout) */}
@@ -111,46 +174,82 @@ function App() {
       />
 
       <div className="app-shell">
-        {/* Top Navigation Bar with Skillora Logo, Middle-Top EN/FR Language Switcher, Top-Right AI Button, FCFA Wallet, WhatsApp, and Settings */}
-        <Navbar
-          screen={screen}
-          setScreen={setScreen}
-          lang={lang}
-          setLang={setLang}
-          t={t}
-          walletBalance={walletBalance}
-          onOpenWallet={() => setIsWalletOpen(true)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenAiAssistant={() => setIsAiAssistantOpen(true)}
-          userRole={currentUser?.role}
-          currentUser={currentUser}
-        />
+        {/* Top Navigation Bar — Only visible when logged in (dashboard screens) */}
+        {!['role-selection', 'client-auth', 'artisan-auth', 'admin-auth'].includes(screen) && (
+          <Navbar
+            screen={screen}
+            setScreen={setScreen}
+            lang={lang}
+            setLang={setLang}
+            t={t}
+            walletBalance={walletBalance}
+            onOpenWallet={() => setIsWalletOpen(true)}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenAiAssistant={() => setIsAiAssistantOpen(true)}
+            userRole={currentUser?.role}
+            currentUser={currentUser}
+            theme={theme}
+            setTheme={setTheme}
+            isNotificationsOpen={isNotificationsOpen}
+            setIsNotificationsOpen={setIsNotificationsOpen}
+          />
+        )}
 
         {/* Dynamic Screen Flow */}
         {screen === 'role-selection' && (
           <RoleSelection
-            onSelectRole={(role) => setScreen(role)}
+            onSelectRole={(role, tab = 'login') => {
+              setAuthTab(tab);
+              setScreen(role);
+            }}
             t={t}
             lang={lang}
+            setLang={setLang}
+            theme={theme}
+            setTheme={setTheme}
           />
         )}
 
         {screen === 'client-auth' && (
           <ClientAuth
+            initialTab={authTab}
+            setAuthTab={setAuthTab}
             onSwitchToArtisan={() => setScreen('artisan-auth')}
+            onBackToLanding={() => setScreen('role-selection')}
             onLoginSuccess={handleClientLoginSuccess}
             triggerToast={triggerToast}
             t={t}
             lang={lang}
+            setLang={setLang}
+            theme={theme}
+            setTheme={setTheme}
           />
         )}
 
         {screen === 'artisan-auth' && (
           <ArtisanAuth
+            initialTab={authTab}
+            setAuthTab={setAuthTab}
             onSwitchToClient={() => setScreen('client-auth')}
+            onBackToLanding={() => setScreen('role-selection')}
             onLoginSuccess={handleArtisanLoginSuccess}
             triggerToast={triggerToast}
             t={t}
+            lang={lang}
+            setLang={setLang}
+            theme={theme}
+            setTheme={setTheme}
+          />
+        )}
+
+        {screen === 'admin-auth' && (
+          <AdminAuth
+            onLoginSuccess={(user) => {
+              setCurrentUser(user);
+              setScreen('admin-dashboard');
+            }}
+            onBack={() => setScreen('role-selection')}
+            triggerToast={triggerToast}
             lang={lang}
           />
         )}
@@ -158,6 +257,7 @@ function App() {
         {screen === 'client-dashboard' && (
           <ClientDashboard
             currentUser={currentUser}
+            setCurrentUser={setCurrentUser}
             walletBalance={walletBalance}
             onOpenWallet={() => setIsWalletOpen(true)}
             onOpenSettings={() => setIsSettingsOpen(true)}
@@ -189,7 +289,7 @@ function App() {
         {/* Artisan Self-Dashboard with Full Edit Capabilities */}
         {screen === 'artisan-dashboard' && (
           <ArtisanDashboard
-            artisan={currentUser}
+            artisanId={currentUser?.professionalId}
             isReadOnly={false}
             currentUser={currentUser}
             userRole={currentUser?.role || 'PROFESSIONAL'}
@@ -199,6 +299,16 @@ function App() {
             onOpenSettings={() => setIsSettingsOpen(true)}
             triggerToast={triggerToast}
             t={t}
+            lang={lang}
+          />
+        )}
+
+        {/* Master Admin Console / Dashboard */}
+        {screen === 'admin-dashboard' && (
+          <AdminDashboard
+            onLogout={handleLogout}
+            onBackToMarketplace={() => setScreen('role-selection')}
+            triggerToast={triggerToast}
             lang={lang}
           />
         )}

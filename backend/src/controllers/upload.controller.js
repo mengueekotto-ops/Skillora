@@ -1,6 +1,4 @@
-const fs = require("fs");
-const path = require("path");
-const { User, Professional, Service, VerificationDocument } = require("../models");
+const { resolveOwnedProfessional } = require("../utils/ownership.util");
 
 /**
  * Generic Image Upload Handler
@@ -71,20 +69,18 @@ const uploadMultipleImages = async (req, res, next) => {
   }
 };
 
+const buildFileUrl = (req, relativeUrl) => {
+  const host = req.get("host") || "localhost:5000";
+  const protocol = req.protocol || "http";
+  return `${protocol}://${host}${relativeUrl}`;
+};
+
 /**
- * Upload and update User Profile Picture
+ * Upload and update the logged-in user's profile picture
  * POST /api/upload/profile-image
  */
 const uploadProfileImage = async (req, res, next) => {
   try {
-    const userId = req.user?._id || req.body.userId;
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "Identifiant utilisateur (userId) manquant.",
-      });
-    }
-
     if (!req.uploadedFile) {
       return res.status(400).json({
         success: false,
@@ -92,26 +88,15 @@ const uploadProfileImage = async (req, res, next) => {
       });
     }
 
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Utilisateur non trouvé.",
-      });
-    }
-
-    const host = req.get("host") || "localhost:5000";
-    const protocol = req.protocol || "http";
-    const fullUrl = `${protocol}://${host}${req.uploadedFile.url}`;
-
-    user.profileImage = fullUrl;
-    await user.save();
+    const fullUrl = buildFileUrl(req, req.uploadedFile.url);
+    req.user.profileImage = fullUrl;
+    await req.user.save();
 
     return res.status(200).json({
       success: true,
       message: "Photo de profil mise à jour avec succès.",
       data: {
-        userId: user._id,
+        userId: req.user._id,
         profileImage: fullUrl,
         relativePath: req.uploadedFile.url,
       },
@@ -122,19 +107,11 @@ const uploadProfileImage = async (req, res, next) => {
 };
 
 /**
- * Upload and update Artisan Cover Photo
+ * Upload and update the logged-in artisan's cover photo (admins may pass artisanId)
  * POST /api/upload/artisan-cover
  */
 const uploadArtisanCover = async (req, res, next) => {
   try {
-    const artisanId = req.body.artisanId || (req.user ? req.user._id : null);
-    if (!artisanId) {
-      return res.status(400).json({
-        success: false,
-        message: "artisanId ou utilisateur authentifié manquant.",
-      });
-    }
-
     if (!req.uploadedFile) {
       return res.status(400).json({
         success: false,
@@ -142,32 +119,59 @@ const uploadArtisanCover = async (req, res, next) => {
       });
     }
 
-    let artisan = await Professional.findById(artisanId);
-    if (!artisan) {
-      artisan = await Professional.findOne({ userId: artisanId });
+    const owned = await resolveOwnedProfessional(req.user, req.body.artisanId);
+    if (!owned.professional) {
+      return res.status(owned.status).json({ success: false, message: owned.message });
     }
 
-    if (!artisan) {
-      return res.status(404).json({
-        success: false,
-        message: "Profil artisan introuvable.",
-      });
-    }
-
-    const host = req.get("host") || "localhost:5000";
-    const protocol = req.protocol || "http";
-    const fullUrl = `${protocol}://${host}${req.uploadedFile.url}`;
-
-    artisan.coverPhoto = fullUrl;
-    await artisan.save();
+    const fullUrl = buildFileUrl(req, req.uploadedFile.url);
+    owned.professional.coverPhoto = fullUrl;
+    await owned.professional.save();
 
     return res.status(200).json({
       success: true,
       message: "Photo de couverture de l'artisan mise à jour.",
       data: {
-        artisanId: artisan._id,
+        artisanId: owned.professional._id,
         coverPhoto: fullUrl,
         relativePath: req.uploadedFile.url,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Upload the logged-in artisan's presentation video
+ * POST /api/upload/video
+ */
+const uploadArtisanVideo = async (req, res, next) => {
+  try {
+    if (!req.uploadedFile) {
+      return res.status(400).json({
+        success: false,
+        message: "Veuillez fournir une vidéo valide (WEBM, MP4 ou MOV).",
+      });
+    }
+
+    const owned = await resolveOwnedProfessional(req.user, req.body.artisanId);
+    if (!owned.professional) {
+      return res.status(owned.status).json({ success: false, message: owned.message });
+    }
+
+    const fullUrl = buildFileUrl(req, req.uploadedFile.url);
+    owned.professional.videoUrl = fullUrl;
+    await owned.professional.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Vidéo de présentation enregistrée.",
+      data: {
+        artisanId: owned.professional._id,
+        url: fullUrl,
+        relativePath: req.uploadedFile.url,
+        size: req.uploadedFile.size,
       },
     });
   } catch (error) {
@@ -180,4 +184,5 @@ module.exports = {
   uploadMultipleImages,
   uploadProfileImage,
   uploadArtisanCover,
+  uploadArtisanVideo,
 };

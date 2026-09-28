@@ -1,71 +1,49 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { api, formatDate, formatFCFA, PAYMENT_STATUS_LABELS } from '../api';
 
+/**
+ * Wallet overview.
+ * - Artisans: earnings credited when clients release escrow (paid out automatically
+ *   to their Mobile Money number, minus the 2% platform fee).
+ * - Clients: money currently held in escrow and their payment history.
+ * Payments themselves are made from a booking ("Payer (Séquestre)") in the client dashboard.
+ */
 export default function WalletPaymentModal({
   isOpen,
   onClose,
   t,
+  lang = 'fr',
+  currentUser,
   walletBalance,
-  setWalletBalance,
-  triggerToast
+  onRefresh
 }) {
-  const [activeTab, setActiveTab] = useState('deposit'); // 'deposit' | 'withdraw'
-  const [paymentProvider, setPaymentProvider] = useState('MTN'); // 'MTN' | 'ORANGE'
-  const [amount, setAmount] = useState('25000');
-  const [phone, setPhone] = useState('670000000');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [transactions, setTransactions] = useState([
-    { id: 'TX-8921', type: 'Deposit', provider: 'MTN MoMo', amount: 50000, date: 'Today, 09:15', status: 'Completed' },
-    { id: 'TX-8410', type: 'Escrow Release', provider: 'Skillora Escrow', amount: 75000, date: 'Yesterday', status: 'Completed' },
-    { id: 'TX-7992', type: 'Withdrawal', provider: 'Orange Money', amount: -30000, date: '25 Aug 2026', status: 'Completed' },
-  ]);
+  const isFrench = lang === 'fr';
+  const tr = (fr, en) => (isFrench ? fr : en);
+  const isArtisan = currentUser?.role === 'PROFESSIONAL';
+
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isOpen || !currentUser) return;
+    setLoading(true);
+    setError('');
+    api('/payments/history')
+      .then((res) => setPayments(res.data || []))
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+    onRefresh?.();
+  }, [isOpen, currentUser, onRefresh]);
 
   if (!isOpen) return null;
 
-  const quickAmounts = [5000, 10000, 25000, 50000, 100000, 250000];
-
-  const handleTransaction = (e) => {
-    e.preventDefault();
-    const numAmount = parseInt(amount, 10);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      triggerToast('Please enter a valid amount in FCFA.', '⚠️');
-      return;
-    }
-
-    if (activeTab === 'withdraw' && numAmount > walletBalance) {
-      triggerToast('Insufficient funds in your Skillora FCFA wallet.', '⚠️');
-      return;
-    }
-
-    setIsProcessing(true);
-
-    setTimeout(() => {
-      setIsProcessing(false);
-      const isDeposit = activeTab === 'deposit';
-      const newBal = isDeposit ? walletBalance + numAmount : walletBalance - numAmount;
-      setWalletBalance(newBal);
-
-      const newTx = {
-        id: `TX-${Math.floor(1000 + Math.random() * 9000)}`,
-        type: isDeposit ? 'Deposit' : 'Withdrawal',
-        provider: paymentProvider === 'MTN' ? 'MTN Mobile Money' : 'Orange Money',
-        amount: isDeposit ? numAmount : -numAmount,
-        date: 'Just now',
-        status: 'Completed'
-      };
-      setTransactions([newTx, ...transactions]);
-
-      const successMsg = isDeposit
-        ? `✓ +${numAmount.toLocaleString()} FCFA successfully added via ${paymentProvider === 'MTN' ? 'MTN MoMo' : 'Orange Money'}!`
-        : `✓ -${numAmount.toLocaleString()} FCFA withdrawn to ${paymentProvider === 'MTN' ? 'MTN' : 'Orange'} (${phone})!`;
-      
-      triggerToast(successMsg, '💰');
-    }, 1500);
-  };
+  const myProfessionalId = currentUser?.professionalId;
+  const isIncoming = (p) => isArtisan && String(p.professionalId?._id || p.professionalId) === String(myProfessionalId);
 
   return (
-    <div className="modal-backdrop-luxury">
-      <div className="wallet-modal-card">
-        {/* Header */}
+    <div className="modal-backdrop-luxury" onClick={onClose}>
+      <div className="wallet-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="wallet-modal-header">
           <div className="wallet-header-title">
             <span className="wallet-title-icon">💳</span>
@@ -74,169 +52,76 @@ export default function WalletPaymentModal({
               <p className="wallet-subtitle">{t.walletSubtitle}</p>
             </div>
           </div>
-          <button className="modal-close-btn" onClick={onClose}>✕</button>
+          <button className="modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
-        {/* Live Balance Card */}
         <div className="wallet-balance-banner">
           <div className="balance-content">
-            <span className="balance-label">{t.currentBalance}</span>
+            <span className="balance-label">
+              {isArtisan ? tr('Gains cumulés', 'Total earnings') : tr('Montant en séquestre', 'Held in escrow')}
+            </span>
             <h1 className="balance-figure">
-              {walletBalance.toLocaleString()} <span className="currency-tag">FCFA</span>
+              {Math.round(walletBalance || 0).toLocaleString('fr-FR')} <span className="currency-tag">FCFA</span>
             </h1>
-            <span className="currency-sub">Central African CFA Franc (XAF)</span>
-          </div>
-          <div className="balance-badges">
-            <span className="badge-payment mtn">MTN MoMo (*126#)</span>
-            <span className="badge-payment orange">Orange Money (#150#)</span>
-          </div>
-        </div>
-
-        {/* Tab Switcher: Deposit vs Withdraw */}
-        <div className="wallet-tab-switch">
-          <button
-            className={`w-tab-btn ${activeTab === 'deposit' ? 'active' : ''}`}
-            onClick={() => setActiveTab('deposit')}
-          >
-            📥 {t.depositTab}
-          </button>
-          <button
-            className={`w-tab-btn ${activeTab === 'withdraw' ? 'active' : ''}`}
-            onClick={() => setActiveTab('withdraw')}
-          >
-            📤 {t.withdrawTab}
-          </button>
-        </div>
-
-        {/* Payment Methods Selection */}
-        <div className="payment-providers-section">
-          <label className="section-mini-label">{t.selectPaymentMethod}:</label>
-          <div className="provider-cards-grid">
-            {/* MTN Mobile Money Card */}
-            <div
-              className={`provider-card mtn-card ${paymentProvider === 'MTN' ? 'selected' : ''}`}
-              onClick={() => setPaymentProvider('MTN')}
-            >
-              <div className="provider-header">
-                <div className="provider-logo-badge mtn-bg">MTN</div>
-                <span className="provider-check">{paymentProvider === 'MTN' ? '● Selected' : '○'}</span>
-              </div>
-              <div className="provider-body">
-                <h3>{t.mtnMomo}</h3>
-                <p>{t.mtnDesc}</p>
-              </div>
-            </div>
-
-            {/* Orange Money Card */}
-            <div
-              className={`provider-card orange-card ${paymentProvider === 'ORANGE' ? 'selected' : ''}`}
-              onClick={() => setPaymentProvider('ORANGE')}
-            >
-              <div className="provider-header">
-                <div className="provider-logo-badge orange-bg">ORANGE</div>
-                <span className="provider-check">{paymentProvider === 'ORANGE' ? '● Selected' : '○'}</span>
-              </div>
-              <div className="provider-body">
-                <h3>{t.orangeMoney}</h3>
-                <p>{t.orangeDesc}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Transaction Form */}
-        <form onSubmit={handleTransaction} className="wallet-form">
-          <div className="form-field-group">
-            <label className="field-label">{t.enterAmount}</label>
-            <div className="amount-input-wrapper">
-              <input
-                type="number"
-                min="500"
-                step="500"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="luxury-amount-input"
-                placeholder="25000"
-                required
-              />
-              <span className="amount-unit">FCFA</span>
-            </div>
-
-            {/* Quick Amount Presets */}
-            <div className="preset-amounts">
-              {quickAmounts.map((amt) => (
-                <button
-                  key={amt}
-                  type="button"
-                  className={`preset-btn ${amount === amt.toString() ? 'active' : ''}`}
-                  onClick={() => setAmount(amt.toString())}
-                >
-                  +{amt.toLocaleString()}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="form-field-group">
-            <label className="field-label">{t.enterPhone}</label>
-            <div className="phone-input-wrapper">
-              <span className="phone-prefix">🇨🇲 +237</span>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="luxury-phone-input"
-                placeholder="670 000 000"
-                required
-              />
-            </div>
-            <span className="phone-helper">
-              {paymentProvider === 'MTN'
-                ? 'You will receive an MTN MoMo prompt on your phone to confirm with your PIN.'
-                : 'You will receive an Orange Money prompt or generate your authorization OTP via #150#.'}
+            <span className="currency-sub">
+              {isArtisan
+                ? tr(
+                    'Versés automatiquement sur votre numéro Mobile Money dès que le client valide la fin des travaux (frais Skillora : 2%).',
+                    'Paid automatically to your Mobile Money number once the client confirms the job (Skillora fee: 2%).'
+                  )
+                : tr(
+                    "Vos paiements restent bloqués jusqu'à votre validation de fin des travaux.",
+                    'Your payments stay locked until you confirm the job is finished.'
+                  )}
             </span>
           </div>
+          <div className="balance-badges">
+            <span className="badge-payment mtn">MTN MoMo</span>
+            <span className="badge-payment orange">Orange Money</span>
+          </div>
+        </div>
 
-          <button
-            type="submit"
-            className={`btn-process-payment ${paymentProvider.toLowerCase()}`}
-            disabled={isProcessing}
-          >
-            {isProcessing ? (
-              <span>⏳ Connecting with {paymentProvider === 'MTN' ? 'MTN MoMo' : 'Orange Money'}...</span>
-            ) : (
-              <span>
-                {activeTab === 'deposit' ? t.processDeposit : t.processWithdraw} (
-                {parseInt(amount || '0', 10).toLocaleString()} FCFA)
-              </span>
-            )}
-          </button>
-        </form>
-
-        {/* Recent Transactions List */}
         <div className="tx-history-box">
           <h4 className="tx-title">{t.recentTransactions}</h4>
-          <div className="tx-list">
-            {transactions.map((tx) => (
-              <div key={tx.id} className="tx-row">
-                <div className="tx-left">
-                  <span className={`tx-icon ${tx.amount > 0 ? 'deposit' : 'withdraw'}`}>
-                    {tx.amount > 0 ? '↓' : '↑'}
-                  </span>
-                  <div>
-                    <span className="tx-desc">{tx.type} • {tx.provider}</span>
-                    <span className="tx-date">{tx.date}</span>
+          {loading ? (
+            <p className="tx-date">{tr('Chargement…', 'Loading…')}</p>
+          ) : error ? (
+            <p className="tx-date">⚠️ {error}</p>
+          ) : payments.length === 0 ? (
+            <p className="tx-date">{tr('Aucune transaction pour le moment.', 'No transactions yet.')}</p>
+          ) : (
+            <div className="tx-list">
+              {payments.map((p) => {
+                const incoming = isIncoming(p);
+                const amount = incoming ? p.artisanAmount : p.amount;
+                const label = PAYMENT_STATUS_LABELS[p.status] || { fr: p.status, en: p.status };
+                const client = p.customerId ? `${p.customerId.firstName || ''} ${p.customerId.lastName || ''}`.trim() : '';
+                const artisan = p.professionalId?.userId
+                  ? `${p.professionalId.userId.firstName || ''} ${p.professionalId.userId.lastName || ''}`.trim()
+                  : '';
+                return (
+                  <div key={p._id} className="tx-row">
+                    <div className="tx-left">
+                      <span className={`tx-icon ${incoming ? 'deposit' : 'withdraw'}`}>{incoming ? '↓' : '↑'}</span>
+                      <div>
+                        <span className="tx-desc">
+                          {incoming ? tr(`Paiement de ${client}`, `Payment from ${client}`) : tr(`Paiement à ${artisan}`, `Payment to ${artisan}`)}
+                          {p.serviceRequestId?.description ? ` • ${p.serviceRequestId.description.slice(0, 40)}` : ''}
+                        </span>
+                        <span className="tx-date">{formatDate(p.createdAt, lang)}</span>
+                      </div>
+                    </div>
+                    <div className="tx-right">
+                      <span className={`tx-amount ${incoming ? 'pos' : 'neg'}`}>
+                        {incoming ? '+' : '−'}{formatFCFA(amount)}
+                      </span>
+                      <span className="tx-status">{isFrench ? label.fr : label.en}</span>
+                    </div>
                   </div>
-                </div>
-                <div className="tx-right">
-                  <span className={`tx-amount ${tx.amount > 0 ? 'pos' : 'neg'}`}>
-                    {tx.amount > 0 ? `+${tx.amount.toLocaleString()}` : tx.amount.toLocaleString()} FCFA
-                  </span>
-                  <span className="tx-status">{tx.status}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

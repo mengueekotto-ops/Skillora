@@ -1,50 +1,36 @@
 import React, { useState } from 'react';
+import ForgotPasswordModal from './ForgotPasswordModal';
+import { api, normalizeUser, saveSession } from '../api';
 
 export default function AdminAuth({ onLoginSuccess, onBack, triggerToast, lang }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
 
   const handleAdminLogin = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
 
     setIsSubmitting(true);
-    const normalizedEmail = email.trim().toLowerCase();
-
     try {
-      const res = await fetch('/api/admin/auth/login', {
+      const data = await api('/admin/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: normalizedEmail, password }),
+        auth: false,
+        body: { email: email.trim().toLowerCase(), password },
       });
-
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        const token = data.token || data.data?.token;
-        if (token) {
-          localStorage.setItem('skillora_admin_token', token);
-        }
-        triggerToast(
-          lang === 'fr'
-            ? 'Connexion Administrateur autorisée. Accès sécurisé établi.'
-            : 'Super Admin Access Authorized. Secure Session Established.',
-          '🛡️'
-        );
-        onLoginSuccess(data.data?.user || { role: 'ADMIN', email: normalizedEmail });
-      } else {
-        triggerToast(
-          data.message || (lang === 'fr' ? 'Accès refusé. Identifiants administrateur incorrects.' : 'Access Denied. Invalid admin credentials.'),
-          '⚠️'
-        );
-      }
-    } catch (err) {
+      const user = normalizeUser(data.data.user);
+      saveSession(data.data.token, user);
       triggerToast(
-        lang === 'fr' ? 'Erreur de connexion au serveur admin.' : 'Cannot connect to Admin API backend.',
-        '⚠️'
+        lang === 'fr'
+          ? 'Connexion Administrateur autorisée. Accès sécurisé établi.'
+          : 'Super Admin Access Authorized. Secure Session Established.',
+        '🛡️'
       );
+      onLoginSuccess(user);
+    } catch (err) {
+      triggerToast(err.message, '⚠️');
     } finally {
       setIsSubmitting(false);
     }
@@ -87,9 +73,14 @@ export default function AdminAuth({ onLoginSuccess, onBack, triggerToast, lang }
           </div>
 
           <div className="field">
-            <label className="field-label">
-              {lang === 'fr' ? 'Clé de Sécurité / Mot de Passe' : 'Security Key / Password'}
-            </label>
+            <div className="field-row">
+              <label className="field-label">
+                {lang === 'fr' ? 'Clé de Sécurité / Mot de Passe' : 'Security Key / Password'}
+              </label>
+              <span className="forgot-link" style={{ cursor: 'pointer' }} onClick={() => setIsForgotModalOpen(true)}>
+                {lang === 'fr' ? 'Mot de passe oublié ?' : 'Forgot password?'}
+              </span>
+            </div>
             <div className="input-wrap">
               <span className="input-icon">🔑</span>
               <input
@@ -133,6 +124,17 @@ export default function AdminAuth({ onLoginSuccess, onBack, triggerToast, lang }
             ← {lang === 'fr' ? 'Retour au Marché Skillora' : 'Return to Skillora Marketplace'}
           </button>
         </div>
+        {/* Forgot Password Modal */}
+        <ForgotPasswordModal
+          isOpen={isForgotModalOpen}
+          onClose={() => setIsForgotModalOpen(false)}
+          triggerToast={triggerToast}
+          lang={lang}
+          onPasswordResetSuccess={(resetEmail, resetPass) => {
+            setEmail(resetEmail);
+            setPassword(resetPass);
+          }}
+        />
       </div>
     </div>
   );

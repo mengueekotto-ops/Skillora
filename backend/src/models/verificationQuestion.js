@@ -19,6 +19,18 @@ const verificationQuestionSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    options: {
+      type: [String],
+      default: [],
+    },
+    correctOption: {
+      type: mongoose.Schema.Types.Mixed,
+      default: 0,
+    },
+    explanation: {
+      type: String,
+      default: "",
+    },
     weight: {
       type: Number,
       default: 33,

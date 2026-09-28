@@ -1,128 +1,351 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { api, formatDate } from '../api';
 
-export default function Navbar({
-  screen,
-  setScreen,
-  lang,
-  setLang,
-  t,
-  walletBalance,
-  onOpenWallet,
-  onOpenSettings,
-  onOpenAiAssistant,
-  userRole,
-  currentUser
-}) {
-  const toggleLang = () => {
-    setLang(lang === 'en' ? 'fr' : 'en');
-  };
+/* ------------------------------------------------------------------ */
+/* Static data                                                         */
+/* ------------------------------------------------------------------ */
 
-  const handleWhatsAppClick = () => {
-    const phoneNumber = "237670000000";
-    const text = encodeURIComponent(
-      lang === 'fr'
-        ? "Bonjour Skillora, je souhaite obtenir de l'assistance pour mon projet d'artisanat au Cameroun."
-        : "Hello Skillora, I would like assistance with my artisan service project in Cameroon."
-    );
-    window.open(`https://wa.me/${phoneNumber}?text=${text}`, '_blank');
-  };
+const HOME_SCREEN = 'role-selection';
 
+const LANGUAGES = [
+  { code: 'en', flag: '🇬🇧', label: 'EN', title: 'English' },
+  { code: 'fr', flag: '🇫🇷', label: 'FR', title: 'Français' },
+];
+
+const THEMES = [
+  { value: 'light', icon: '☀️', label: 'Clair', title: 'Mode Clair' },
+  { value: 'dark', icon: '🌙', label: 'Sombre', title: 'Mode Sombre' },
+];
+
+
+
+/* Shared class names */
+const ICON_BUTTON_CLASS =
+  'p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors outline-none';
+
+/* ------------------------------------------------------------------ */
+/* Small building blocks                                               */
+/* ------------------------------------------------------------------ */
+
+function Brand({ t, onGoHome }) {
   return (
-    <header className="skillora-nav">
-      {/* Top Left: Skillora Brand (No Senvato, No Interlink) */}
-      <div className="nav-left">
-        <a
-          href="#"
-          className="skillora-brand"
-          onClick={(e) => {
-            e.preventDefault();
-            setScreen('role-selection');
-          }}
-        >
-          <div className="brand-icon-gem">💎</div>
-          <div className="brand-text-stack">
-            <span className="brand-name">Skillora</span>
-            <span className="brand-tagline">{t.brandTag}</span>
-          </div>
-        </a>
-      </div>
-
-      {/* Middle Top: Clean Language Switcher Button [ EN | FR ] */}
-      <div className="nav-middle">
-        <div className="lang-switcher-pill">
-          <button
-            className={`lang-btn ${lang === 'en' ? 'active' : ''}`}
-            onClick={() => setLang('en')}
-            title="English"
-          >
-            🇬🇧 EN
-          </button>
-          <span className="lang-divider">|</span>
-          <button
-            className={`lang-btn ${lang === 'fr' ? 'active' : ''}`}
-            onClick={() => setLang('fr')}
-            title="Français"
-          >
-            🇫🇷 FR
-          </button>
-        </div>
-      </div>
-
-      {/* Top Right: All Nav Actions */}
-      <div className="nav-right">
-        {/* AI Assistant Launch Button */}
-        <button
-          className="btn-ai-assistant-top"
-          onClick={onOpenAiAssistant}
-          title="Skillora AI Assistant"
-        >
-          <span className="ai-btn-sparkle">✨</span>
-          <span className="ai-btn-text">Skillora AI</span>
-        </button>
-
-        {/* WhatsApp Direct Chat Button */}
-        <button
-          className="btn-whatsapp-direct"
-          onClick={handleWhatsAppClick}
-          title="Direct WhatsApp Support (+237)"
-        >
-          <svg className="whatsapp-svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-            <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0012.04 2zm.01 1.67c4.54 0 8.24 3.7 8.24 8.24 0 2.2-.86 4.28-2.42 5.83a8.188 8.188 0 01-5.82 2.41c-1.46 0-2.89-.39-4.14-1.12l-.3-.18-3.08.81.82-3-.19-.31a8.19 8.19 0 01-1.27-4.44c0-4.54 3.7-8.24 8.24-8.24zm4.52 11.64c-.25-.13-1.47-.72-1.7-.81-.23-.08-.39-.13-.56.13-.17.25-.65.81-.8 1-.15.19-.3.21-.55.08-.25-.13-1.07-.39-2.04-1.25-.75-.67-1.26-1.5-1.41-1.75-.15-.25-.02-.39.11-.51.11-.11.25-.29.38-.44.13-.15.17-.25.25-.42.08-.17.04-.32-.02-.44-.06-.13-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.1 0 1.24.9 2.44 1.03 2.61.13.17 1.78 2.72 4.31 3.81.6.26 1.07.41 1.44.53.6.19 1.15.16 1.59.1.49-.07 1.47-.6 1.68-1.18.21-.58.21-1.08.15-1.18-.06-.1-.23-.17-.48-.29z"/>
-          </svg>
-          <span className="wa-text">WhatsApp</span>
-        </button>
-
-        {/* Franc CFA Wallet Badge */}
-        <button
-          className="btn-wallet-top"
-          onClick={onOpenWallet}
-          title={t.walletSubtitle}
-        >
-          <span className="wallet-icon">💳</span>
-          <div className="wallet-balance-info">
-            <span className="wallet-tag">{t.wallet}</span>
-            <span className="wallet-amount">{walletBalance.toLocaleString()} FCFA</span>
-          </div>
-          <span className="wallet-plus">+</span>
-        </button>
-
-        {/* Settings Button */}
-        <button
-          className="btn-settings-top"
-          onClick={onOpenSettings}
-          title={t.settings}
-        >
-          <span className="settings-gear">⚙️</span>
-        </button>
-
-        {/* Role switcher / Back Button */}
-        {screen !== 'role-selection' && (
-          <button className="btn-nav-back" onClick={() => setScreen('role-selection')}>
-            {t.backToHome}
-          </button>
+    <div className="landing-brand flex items-center gap-2">
+      <a
+        href="#"
+        onClick={(e) => {
+          e.preventDefault();
+          onGoHome?.();
+        }}
+        className="flex items-center gap-2 outline-none"
+      >
+        <span className="brand-icon-gem text-2xl">💎</span>
+        <span className="brand-name text-xl font-extrabold tracking-tight">Skillora</span>
+        {t?.brandTag && (
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider hidden sm:block ml-2 mt-1">
+            {t.brandTag}
+          </span>
         )}
-      </div>
-    </header>
+      </a>
+    </div>
   );
 }
 
+function LanguageSwitcher({ lang, setLang }) {
+  return (
+    <div className="lang-switcher-pill flex items-center rounded-lg p-1 text-xs">
+      {LANGUAGES.map(({ code, flag, label, title }, index) => (
+        <React.Fragment key={code}>
+          {index > 0 && <span className="lang-divider px-1 opacity-40">|</span>}
+          <button
+            type="button"
+            className={`lang-btn px-2 py-1 rounded font-bold transition-all ${lang === code ? 'active' : ''}`}
+            onClick={() => setLang?.(code)}
+            title={title}
+          >
+            {flag} {label}
+          </button>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+function ThemeToggle({ theme, setTheme }) {
+  return (
+    <div className="theme-toggle-pill hidden sm:flex items-center rounded-lg p-1 text-xs">
+      {THEMES.map(({ value, icon, label, title }) => (
+        <button
+          key={value}
+          type="button"
+          className={`theme-toggle-btn px-2 py-1 rounded font-semibold transition-all ${theme === value ? 'active' : ''}`}
+          onClick={() => setTheme?.(value)}
+          title={title}
+        >
+          {icon} <span className="theme-toggle-label ml-1">{label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function WalletBadge({ balance, onClick, t }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200/50 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+      title={t?.walletSubtitle || 'Portefeuille FCFA'}
+    >
+      <span className="text-sm">💳</span>
+      <span className="text-xs font-bold whitespace-nowrap tracking-wide">
+        {balance.toLocaleString()} FCFA
+      </span>
+    </button>
+  );
+}
+
+const NOTIFICATION_ICONS = { PAYMENT: '💳', REQUEST: '📋', REQUEST_UPDATE: '🔄', VERIFICATION: '🛡️', SYSTEM: '🔔' };
+const NOTIFICATION_POLL_MS = 60 * 1000;
+
+/** Live notifications of the logged-in user, refreshed every minute. */
+function useNotifications(enabled) {
+  const [items, setItems] = useState([]);
+
+  const refresh = useCallback(async () => {
+    if (!enabled) return;
+    try {
+      const res = await api('/notifications');
+      setItems(res.data || []);
+    } catch { /* keep the last known list */ }
+  }, [enabled]);
+
+  useEffect(() => {
+    refresh();
+    if (!enabled) return undefined;
+    const timer = setInterval(refresh, NOTIFICATION_POLL_MS);
+    return () => clearInterval(timer);
+  }, [enabled, refresh]);
+
+  const markAllRead = async () => {
+    setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    try { await api('/notifications/read-all', { method: 'PUT' }); } catch { refresh(); }
+  };
+
+  return { items, unread: items.filter((n) => !n.isRead).length, markAllRead, refresh };
+}
+
+function NotificationBell({ onClick, unread }) {
+  return (
+    <button type="button" onClick={onClick} className={`relative ${ICON_BUTTON_CLASS}`} aria-label={`Notifications (${unread})`}>
+      <span className="text-lg leading-none">🔔</span>
+      {unread > 0 && (
+        <span className="absolute top-1.5 right-1.5 flex items-center justify-center min-w-3.5 h-3.5 px-0.5 bg-red-500 border-[1.5px] border-white dark:border-[#0f172a] text-white text-[9px] font-bold rounded-full">
+          {unread > 9 ? '9+' : unread}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function SettingsButton({ onClick, t }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={ICON_BUTTON_CLASS}
+      title={t?.settings || 'Paramètres'}
+    >
+      <span className="text-lg leading-none">⚙️</span>
+    </button>
+  );
+}
+
+function BackHomeButton({ onClick, t }) {
+  return (
+    <>
+      <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block" />
+      <button
+        type="button"
+        onClick={onClick}
+        className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors outline-none"
+      >
+        <span>←</span> {t?.backToHome || 'Accueil'}
+      </button>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Notification slide-over panel                                       */
+/* ------------------------------------------------------------------ */
+
+function NotificationItem({ icon, title, body, time, read }) {
+  return (
+    <div
+      className={`notification-item p-3 rounded-xl border ${
+        read ? 'bg-slate-800/40 border-slate-800' : 'bg-slate-800/80 border-slate-700/50'
+      }`}
+    >
+      <span className="notif-icon">{icon}</span>
+      <div className="notif-content text-xs">
+        <div className={`notif-title font-bold ${read ? 'text-slate-300' : 'text-white'}`}>{title}</div>
+        <div className={`notif-body mt-1 ${read ? 'text-slate-400' : 'text-slate-300'}`}>{body}</div>
+        <div className="notif-time text-slate-500 text-[10px] mt-1">{time}</div>
+      </div>
+    </div>
+  );
+}
+
+function NotificationPanel({ onClose, items, onMarkAllRead, lang }) {
+  return (
+    <div
+      className="notification-panel-overlay fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+      onClick={onClose}
+    >
+      <div
+        className="notification-panel fixed right-0 top-0 bottom-0 w-80 bg-slate-900 border-l border-slate-800 p-4 shadow-2xl z-50 flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="notification-header flex items-center justify-between pb-3 border-b border-slate-800">
+          <h3 className="font-bold text-white text-sm">🔔 Vos Notifications</h3>
+          <button type="button" className="btn-close-notif text-slate-400 hover:text-white" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        {/* List */}
+        <div className="notification-list flex-1 overflow-y-auto py-3 space-y-3">
+          {items.length === 0 ? (
+            <p className="text-slate-400 text-xs text-center py-8">
+              {lang === 'fr' ? 'Aucune notification pour le moment.' : 'No notifications yet.'}
+            </p>
+          ) : (
+            items.map((n) => (
+              <NotificationItem
+                key={n._id}
+                icon={NOTIFICATION_ICONS[n.type] || '🔔'}
+                title={n.title}
+                body={n.message}
+                time={formatDate(n.createdAt, lang)}
+                read={n.isRead}
+              />
+            ))
+          )}
+        </div>
+
+        {/* Footer */}
+        {items.some((n) => !n.isRead) && (
+          <div className="notification-footer pt-3 border-t border-slate-800">
+            <button
+              type="button"
+              className="btn-mark-read w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all"
+              onClick={onMarkAllRead}
+            >
+              {lang === 'fr' ? 'Tout marquer comme lu ✓' : 'Mark all as read ✓'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Floating AI assistant badge (bottom-left)                           */
+/* ------------------------------------------------------------------ */
+
+function AiAssistantBadge({ onClick, lang }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="fixed bottom-6 left-6 z-[9999] flex items-center gap-3 px-4 py-2 rounded-full bg-[#0f172a] hover:bg-[#1e293b] border border-[#334155] shadow-[0_10px_40px_rgba(0,0,0,0.5)] active:scale-95 transition-all duration-200 group"
+      title="Skillora AI Assistant"
+    >
+      {/* Icon */}
+      <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-cyan-500 shadow-inner group-hover:brightness-110 transition-all">
+        <span className="text-white text-lg">✨</span>
+      </div>
+
+      {/* Text */}
+      <div className="flex flex-col items-start text-left">
+        <div className="flex items-center gap-1.5">
+          <span className="text-white font-black text-xs tracking-wider">SKILLORA AI</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)] animate-pulse" />
+        </div>
+        <span className="text-slate-400 text-[10px] font-medium group-hover:text-slate-300 transition-colors">
+          {lang === 'fr' ? 'Votre assistant intelligent' : 'Your smart assistant'}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Navbar                                                              */
+/* ------------------------------------------------------------------ */
+
+export default function Navbar({
+  // navigation
+  screen,
+  setScreen,
+  // language & theme
+  lang,
+  setLang,
+  t,
+  theme = 'light',
+  setTheme,
+  // actions
+  walletBalance = 0,
+  onOpenWallet,
+  onOpenSettings,
+  onOpenAiAssistant,
+  // notifications
+  isNotificationsOpen = false,
+  setIsNotificationsOpen,
+  currentUser,
+}) {
+  const goHome = () => setScreen?.(HOME_SCREEN);
+  const notifications = useNotifications(Boolean(currentUser));
+  const toggleNotifications = () => {
+    if (!isNotificationsOpen) notifications.refresh();
+    setIsNotificationsOpen?.(!isNotificationsOpen);
+  };
+  const closeNotifications = () => setIsNotificationsOpen?.(false);
+
+  const showBackHome = Boolean(screen && screen !== HOME_SCREEN && setScreen);
+
+  return (
+    <>
+      <header className="fullwidth-top-navbar w-full fixed top-0 left-0 right-0 z-50">
+        <div className="navbar-fullwidth-inner w-full flex items-center justify-between px-6 py-3">
+          {/* LEFT: logo & brand */}
+          <Brand t={t} onGoHome={goHome} />
+
+          {/* RIGHT: controls & actions */}
+          <div className="landing-controls flex items-center gap-3">
+            <LanguageSwitcher lang={lang} setLang={setLang} />
+            <ThemeToggle theme={theme} setTheme={setTheme} />
+
+            {onOpenWallet && <WalletBadge balance={walletBalance} onClick={onOpenWallet} t={t} />}
+            {setIsNotificationsOpen && <NotificationBell onClick={toggleNotifications} unread={notifications.unread} />}
+            {onOpenSettings && <SettingsButton onClick={onOpenSettings} t={t} />}
+            {showBackHome && <BackHomeButton onClick={goHome} t={t} />}
+          </div>
+        </div>
+      </header>
+
+      {isNotificationsOpen && (
+        <NotificationPanel
+          onClose={closeNotifications}
+          items={notifications.items}
+          onMarkAllRead={notifications.markAllRead}
+          lang={lang}
+        />
+      )}
+
+      {onOpenAiAssistant && <AiAssistantBadge onClick={onOpenAiAssistant} lang={lang} />}
+    </>
+  );
+}

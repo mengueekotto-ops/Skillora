@@ -10,6 +10,7 @@ const Verification = require("./verification");
 const VerificationQuestion = require("./verificationQuestion");
 const VerificationAnswer = require("./verificationAnswer");
 const VerificationDocument = require("./verificationDocument");
+const Payment = require("./payment");
 
 module.exports = {
   User,
@@ -24,4 +25,6 @@ module.exports = {
   VerificationQuestion,
   VerificationAnswer,
   VerificationDocument,
+  Payment,
 };
+

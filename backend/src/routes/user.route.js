@@ -1,12 +1,16 @@
 const express = require("express");
 const router = express.Router();
-const { getAllUsers, getUserById, updateUser, deleteUser } = require("../controllers/user.controller");
+const { getAllUsers, getUserById, updateUser, updateUserLocation, deleteUser } = require("../controllers/user.controller");
 const authenticateToken = require("../middleware/auth.middleware");
+const authorizeRoles = require("../middleware/role.middleware");
 
-// Direct access to list all users for Admin Dashboard
-router.get("/", getAllUsers);
+router.use(authenticateToken);
+
+router.get("/", authorizeRoles("ADMIN"), getAllUsers);
+router.post("/location", updateUserLocation);
+router.put("/location", updateUserLocation);
 router.get("/:id", getUserById);
-router.put("/:id", authenticateToken, updateUser);
-router.delete("/:id", authenticateToken, deleteUser);
+router.put("/:id", updateUser);
+router.delete("/:id", deleteUser);
 
 module.exports = router;

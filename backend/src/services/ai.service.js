@@ -4,13 +4,17 @@
  * Supports question generation, technical evaluation, intent extraction & verification scoring.
  */
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "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";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || null; // never hardcode keys — set it in backend/.env
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "minimax/minimax-m3:free";
 
 /**
  * Helper to call OpenRouter Chat Completions API
  */
 async function callOpenRouter(messages, temperature = 0.4) {
+  if (!OPENROUTER_API_KEY) {
+    // No key configured: callers fall back to the built-in question banks and rules
+    return null;
+  }
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",

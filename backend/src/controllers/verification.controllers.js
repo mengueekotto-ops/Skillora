@@ -12,66 +12,84 @@ const {
   calculateVerificationDecision,
   analyzeDocument,
 } = require("../services/ai.service");
+const { resolveOwnedProfessional, isAdmin, isSameId } = require("../utils/ownership.util");
+
+const QUIZ_QUESTION_COUNT = 10;
+const QUIZ_PASSING_PERCENT = 60;
+const QUIZ_SECONDS_PER_QUESTION = 30;
+const QUIZ_SESSION_TTL_MS = 30 * 60 * 1000;
+const QUIZ_ENGINE = "Skillora AI Quiz Engine";
+
+const fail = (res, status, message, extra = {}) =>
+  res.status(status).json({ success: false, message, ...extra });
 
 /**
- * Start Verification Workflow for an Artisan (Optional)
- * POST /api/verifications/start
+ * Load a verification session and make sure the current user owns the artisan it belongs to.
+ */
+async function loadOwnedVerification(req, verificationId) {
+  const verification = await Verification.findById(verificationId).populate("artisanId");
+  if (!verification || !verification.artisanId) {
+    return { status: 404, message: "Verification record not found" };
+  }
+  if (!isAdmin(req.user) && !isSameId(verification.artisanId.userId, req.user._id)) {
+    return { status: 404, message: "Verification record not found" };
+  }
+  return { verification };
+}
+
+/** Rough profile completeness score (0-100) from the fields an artisan has filled in. */
+function computeProfileCompleteness(artisan) {
+  const checks = [
+    Boolean(artisan.profession),
+    Boolean(artisan.bio && artisan.bio.length >= 30),
+    Array.isArray(artisan.skills) && artisan.skills.length > 0,
+    (artisan.experience || 0) > 0,
+    Boolean(artisan.videoUrl),
+    Boolean(artisan.coverPhoto),
+    Array.isArray(artisan.portfolio) && artisan.portfolio.length > 0,
+    Boolean(artisan.serviceArea || artisan.latitude),
+  ];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+}
+
+/**
+ * Start the written technical-assessment workflow
+ * POST /api/verifications/start   Body: { artisanId? }
  */
 async function startVerification(req, res, next) {
   try {
-    const { artisanId } = req.body || {};
+    const owned = await resolveOwnedProfessional(req.user, (req.body || {}).artisanId);
+    if (!owned.professional) return fail(res, owned.status, owned.message);
+    const artisan = owned.professional;
 
-    if (!artisanId) {
-      return res.status(400).json({
-        success: false,
-        message: "artisanId is required",
-      });
-    }
-
-    const artisan = await Professional.findById(artisanId);
-    if (!artisan) {
-      return res.status(404).json({
-        success: false,
-        message: "Artisan profile not found",
-      });
-    }
-
-    // Create new Verification session
     const verification = await Verification.create({
       artisanId: artisan._id,
       status: "pending",
-      profileCompletenessScore: 85,
+      profileCompletenessScore: computeProfileCompleteness(artisan),
     });
 
-    // Update artisan state to pending
     artisan.verificationStatus = "pending";
     artisan.verificationAttempts = (artisan.verificationAttempts || 0) + 1;
     await artisan.save();
 
-    // Generate AI technical questions based on profession
     let generatedQuestions = [];
     try {
-      generatedQuestions = await generateTechnicalQuestions({
-        profession: artisan.profession,
-        count: 3,
-      });
+      generatedQuestions = await generateTechnicalQuestions({ profession: artisan.profession, count: 3 });
     } catch (e) {
       generatedQuestions = [
         { question: "How do you ensure workplace safety before starting your work?", expectedAnswer: "Safety check" },
       ];
     }
 
-    const questionRecords = [];
-    for (const q of generatedQuestions) {
-      const qRec = await VerificationQuestion.create({
+    const questionRecords = await VerificationQuestion.insertMany(
+      generatedQuestions.map((q) => ({
         verificationId: verification._id,
         question: q.question,
         expectedAnswer: q.expectedAnswer || null,
         profession: artisan.profession,
         weight: q.weight || 33,
-      });
-      questionRecords.push(qRec);
-    }
+      }))
+    );
 
     return res.status(201).json({
       success: true,
@@ -81,7 +99,8 @@ async function startVerification(req, res, next) {
         artisanId: artisan._id,
         status: "pending",
         profession: artisan.profession,
-        questions: questionRecords,
+        // expectedAnswer stays on the server
+        questions: questionRecords.map((q) => ({ id: q._id, question: q.question, weight: q.weight })),
       },
     });
   } catch (error) {
@@ -90,30 +109,27 @@ async function startVerification(req, res, next) {
 }
 
 /**
- * Submit an Answer to a Technical Assessment Question
- * POST /api/verifications/:id/submit-answer
+ * Submit an answer to a written technical question
+ * POST /api/verifications/:id/submit-answer   Body: { questionId, answer }
  */
 async function submitAnswer(req, res, next) {
   try {
-    const verificationId = req.params.id;
-    const { questionId, artisanId, answer } = req.body || {};
+    const { questionId, answer } = req.body || {};
+    if (!questionId || !answer) return fail(res, 400, "questionId and answer are required");
 
-    if (!questionId || !artisanId || !answer) {
-      return res.status(400).json({
-        success: false,
-        message: "questionId, artisanId, and answer are required",
-      });
-    }
+    const owned = await loadOwnedVerification(req, req.params.id);
+    if (!owned.verification) return fail(res, owned.status, owned.message);
+    const { verification } = owned;
 
-    const question = await VerificationQuestion.findById(questionId);
-    if (!question) {
-      return res.status(404).json({
-        success: false,
-        message: "Assessment question not found",
-      });
-    }
+    if (verification.status !== "pending") return fail(res, 400, "This verification session is already closed.");
 
-    let aiResult = { score: 85, passed: true, feedback: "Valid response." };
+    const question = await VerificationQuestion.findOne({ _id: questionId, verificationId: verification._id });
+    if (!question) return fail(res, 404, "Assessment question not found");
+
+    const alreadyAnswered = await VerificationAnswer.exists({ questionId: question._id });
+    if (alreadyAnswered) return fail(res, 409, "This question has already been answered.");
+
+    let aiResult = { score: 0, passed: false, feedback: "Answer could not be evaluated." };
     try {
       aiResult = await evaluateTechnicalAnswer({
         profession: question.profession,
@@ -121,12 +137,12 @@ async function submitAnswer(req, res, next) {
         answer,
       });
     } catch (e) {
-      // fallback
+      console.warn("AI answer evaluation failed:", e.message);
     }
 
     const answerRecord = await VerificationAnswer.create({
       questionId: question._id,
-      artisanId,
+      artisanId: verification.artisanId._id,
       answer,
       aiScore: aiResult.score,
       aiFeedback: aiResult.feedback,
@@ -149,45 +165,44 @@ async function submitAnswer(req, res, next) {
 }
 
 /**
- * Upload & Analyze Professional Verification Document
- * POST /api/verifications/:id/upload-document
+ * Attach and analyse a verification document
+ * POST /api/verifications/:id/upload-document   Body: { documentType, fileUrl, textSnippet? }
  */
 async function uploadDocument(req, res, next) {
   try {
-    const verificationId = req.params.id;
     const { documentType = "ID_CARD", fileUrl = "", textSnippet = "" } = req.body || {};
+    if (!fileUrl) return fail(res, 400, "fileUrl is required. Upload the file first via /api/upload/image.");
 
-    const verification = await Verification.findById(verificationId).populate("artisanId");
+    const owned = await loadOwnedVerification(req, req.params.id);
+    if (!owned.verification) return fail(res, owned.status, owned.message);
+    const { verification } = owned;
 
-    if (!verification) {
-      return res.status(404).json({
-        success: false,
-        message: "Verification record not found",
-      });
-    }
-
-    let aiResult = { consistencyScore: 90, flags: [] };
+    let aiResult = { consistencyScore: 0, flags: ["NOT_ANALYSED"] };
     try {
       aiResult = await analyzeDocument({
         documentType,
         textContent: textSnippet,
-        declaredProfession: verification.artisanId?.profession || "",
+        declaredProfession: verification.artisanId.profession || "",
       });
     } catch (e) {
-      // fallback
+      console.warn("AI document analysis failed:", e.message);
     }
 
     const docRecord = await VerificationDocument.create({
       verificationId: verification._id,
       documentType,
-      fileUrl: fileUrl || `https://vault.skillora.cm/docs/${Date.now()}_${documentType.toLowerCase()}.pdf`,
+      fileUrl,
       aiResult,
-      reviewStatus: aiResult.flags?.length > 0 ? "FLAGGED_FOR_ADMIN" : "APPROVED",
+      // Identity documents always get a human review; others only when the AI raises flags
+      reviewStatus:
+        ["ID_CARD", "PASSPORT", "SELFIE"].includes(documentType) || aiResult.flags?.length > 0
+          ? "FLAGGED_FOR_ADMIN"
+          : "APPROVED",
     });
 
     return res.status(201).json({
       success: true,
-      message: "Document uploaded to vault & analyzed.",
+      message: "Document uploaded & queued for review.",
       data: docRecord,
     });
   } catch (error) {
@@ -196,39 +211,40 @@ async function uploadDocument(req, res, next) {
 }
 
 /**
- * Finalize Verification Decision
+ * Finalize the written-assessment verification decision
  * POST /api/verifications/:id/complete
  */
 async function completeVerification(req, res, next) {
   try {
-    const verificationId = req.params.id;
-    const verification = await Verification.findById(verificationId).populate("artisanId");
+    const owned = await loadOwnedVerification(req, req.params.id);
+    if (!owned.verification) return fail(res, owned.status, owned.message);
+    const { verification } = owned;
 
-    if (!verification) {
-      return res.status(404).json({
-        success: false,
-        message: "Verification record not found",
-      });
-    }
+    if (verification.status !== "pending") return fail(res, 400, "This verification session is already closed.");
 
     const questions = await VerificationQuestion.find({ verificationId: verification._id });
-    const questionIds = questions.map((q) => q._id);
-    const answers = await VerificationAnswer.find({ questionId: { $in: questionIds } });
+    const answers = await VerificationAnswer.find({ questionId: { $in: questions.map((q) => q._id) } });
+    if (questions.length === 0 || answers.length < questions.length) {
+      return fail(res, 400, "Answer every assessment question before completing verification.");
+    }
 
-    let totalScore = 0;
-    answers.forEach((a) => {
-      totalScore += a.aiScore || 0;
-    });
+    const techScore = Math.round(answers.reduce((sum, a) => sum + (a.aiScore || 0), 0) / answers.length);
 
-    const techScore = answers.length > 0 ? Math.round(totalScore / answers.length) : 80;
-    const profileCompleteness = 90;
-    const documentConsistency = 88;
+    const documents = await VerificationDocument.find({ verificationId: verification._id });
+    const documentConsistency = documents.length
+      ? Math.round(
+          documents.reduce((sum, d) => sum + (Number(d.aiResult?.consistencyScore) || 0), 0) / documents.length
+        )
+      : 0;
+
+    const artisan = await Professional.findById(verification.artisanId._id);
+    const profileCompleteness = computeProfileCompleteness(artisan);
 
     const decision = calculateVerificationDecision({
       profileCompleteness,
       technicalScore: techScore,
       documentScore: documentConsistency,
-      videoSubmitted: true,
+      videoSubmitted: Boolean(artisan.videoUrl),
     });
 
     verification.status = decision.status;
@@ -237,23 +253,20 @@ async function completeVerification(req, res, next) {
     verification.profileCompletenessScore = profileCompleteness;
     verification.technicalAssessmentScore = techScore;
     verification.documentConsistencyScore = documentConsistency;
-    verification.videoVerified = true;
+    verification.videoVerified = Boolean(artisan.videoUrl);
     await verification.save();
 
-    const artisan = await Professional.findById(verification.artisanId._id || verification.artisanId);
-    if (artisan) {
-      artisan.verificationStatus = decision.status;
-      artisan.verifiedBadge = decision.verifiedBadge;
-      artisan.verificationScore = decision.overallScore;
-      artisan.verificationDate = decision.passed ? new Date() : null;
-      await artisan.save();
-    }
+    artisan.verificationStatus = decision.status;
+    artisan.verifiedBadge = decision.verifiedBadge;
+    artisan.verificationScore = decision.overallScore;
+    artisan.verificationDate = decision.passed ? new Date() : null;
+    await artisan.save();
 
     return res.status(200).json({
       success: true,
       message: decision.message,
       data: {
-        artisanId: artisan?._id,
+        artisanId: artisan._id,
         verificationStatus: decision.status,
         verifiedBadge: decision.verifiedBadge,
         verificationScore: decision.overallScore,
@@ -266,32 +279,28 @@ async function completeVerification(req, res, next) {
 }
 
 /**
- * Skip Verification (Unverified Artisan)
- * POST /api/verifications/skip
+ * Skip verification (artisan works without the Verified Badge)
+ * POST /api/verifications/skip   Body: { artisanId? }
  */
 async function skipVerification(req, res, next) {
   try {
-    const { artisanId } = req.body || {};
-    const artisan = await Professional.findById(artisanId);
+    const owned = await resolveOwnedProfessional(req.user, (req.body || {}).artisanId);
+    if (!owned.professional) return fail(res, owned.status, owned.message);
+    const artisan = owned.professional;
 
-    if (!artisan) {
-      return res.status(404).json({
-        success: false,
-        message: "Artisan not found",
-      });
+    // Skipping never removes a badge that was already earned
+    if (!artisan.verifiedBadge) {
+      artisan.verificationStatus = "unverified";
+      await artisan.save();
     }
-
-    artisan.verificationStatus = "unverified";
-    artisan.verifiedBadge = false;
-    await artisan.save();
 
     return res.status(200).json({
       success: true,
-      message: "Artisan account set to unverified. Full platform access granted without Verified Badge.",
+      message: "You can offer services now and complete verification at any time.",
       data: {
         artisanId: artisan._id,
-        verificationStatus: "unverified",
-        verifiedBadge: false,
+        verificationStatus: artisan.verificationStatus,
+        verifiedBadge: artisan.verifiedBadge,
       },
     });
   } catch (error) {
@@ -300,28 +309,26 @@ async function skipVerification(req, res, next) {
 }
 
 /**
- * Get Verification Status for an Artisan
+ * Public verification status of an artisan
  * GET /api/verifications/:artisanId/status
  */
 async function getVerificationStatus(req, res, next) {
   try {
-    const { artisanId } = req.params;
-    const artisan = await Professional.findById(artisanId);
+    const artisan = await Professional.findById(req.params.artisanId);
+    if (!artisan) return fail(res, 404, "Artisan profile not found");
 
-    if (!artisan) {
-      return res.status(404).json({
-        success: false,
-        message: "Artisan profile not found",
-      });
-    }
-
-    const latestVerification = await Verification.findOne({ artisanId: artisan._id }).sort({ createdAt: -1 });
+    const latestVerification = await Verification.findOne({
+      artisanId: artisan._id,
+      status: { $ne: "pending" },
+    })
+      .sort({ createdAt: -1 })
+      .select("status score completedAt reviewedBy");
 
     return res.status(200).json({
       success: true,
       data: {
         artisanId: artisan._id,
-        name: artisan.profession,
+        profession: artisan.profession,
         verificationStatus: artisan.verificationStatus || "unverified",
         verifiedBadge: Boolean(artisan.verifiedBadge),
         verificationScore: artisan.verificationScore || 0,
@@ -335,76 +342,70 @@ async function getVerificationStatus(req, res, next) {
   }
 }
 
-
 /**
- * Start Quiz Verification — Generate 10 MCQ Questions for an Artisan
- * POST /api/verifications/quiz/start
- * Body: { artisanId, lang? }
+ * Start a 10-question MCQ quiz for the logged-in artisan.
+ * The correct answers are stored server-side; the client only receives the questions.
+ * POST /api/verifications/quiz/start   Body: { artisanId?, lang? }
  */
 async function startQuizVerification(req, res, next) {
   try {
     const { artisanId, lang = "fr" } = req.body || {};
 
-    if (!artisanId) {
-      return res.status(400).json({ success: false, message: "artisanId is required" });
-    }
-
-    const artisan = await Professional.findById(artisanId);
-    if (!artisan) {
-      return res.status(404).json({ success: false, message: "Artisan profile not found" });
-    }
-
+    const owned = await resolveOwnedProfessional(req.user, artisanId);
+    if (!owned.professional) return fail(res, owned.status, owned.message);
+    const artisan = owned.professional;
     const profession = artisan.profession || "General Artisan";
+
+    // Close any quiz session left open, so only one can be active at a time
+    await Verification.updateMany(
+      { artisanId: artisan._id, status: "pending", reviewedBy: QUIZ_ENGINE },
+      { status: "failed", completedAt: new Date(), adminDecision: "ABANDONED — superseded by a new quiz" }
+    );
 
     let questions = [];
     try {
       questions = await generateMCQQuestions({ profession, lang });
     } catch (e) {
-      console.warn("⚠️ generateMCQQuestions failed, using default fallback:", e.message);
-      questions = [
-        { q: "What is the first safety step before starting a job?", options: ["Start immediately", "Conduct a safety assessment", "Order materials", "Call the client"], correct: 1, explanation: "Safety first." },
-      ];
+      console.warn("⚠️ generateMCQQuestions failed:", e.message);
     }
 
-    // Ensure exactly 10 questions (pad from defaults if AI returned fewer)
-    while (questions.length < 10) {
-      questions.push({
-        q: `Professional practice question ${questions.length + 1} for ${profession}`,
-        options: ["Option A", "Option B (Correct)", "Option C", "Option D"],
-        correct: 1,
-        explanation: "Standard professional practice.",
-      });
+    questions = (questions || []).filter(
+      (q) => q && q.q && Array.isArray(q.options) && q.options.length >= 2 && Number.isInteger(q.correct)
+    );
+    if (questions.length < QUIZ_QUESTION_COUNT) {
+      return fail(res, 503, "The quiz could not be generated right now. Please try again in a moment.");
     }
-    questions = questions.slice(0, 10);
+    questions = questions.slice(0, QUIZ_QUESTION_COUNT);
 
-    // Strip the correct answers before sending to client (prevent cheating)
-    // We store a signed quiz session token instead using a lightweight approach
-    const sessionToken = Buffer.from(
-      JSON.stringify({
-        artisanId: artisan._id.toString(),
+    const verification = await Verification.create({
+      artisanId: artisan._id,
+      status: "pending",
+      reviewedBy: QUIZ_ENGINE,
+    });
+
+    const records = await VerificationQuestion.insertMany(
+      questions.map((q) => ({
+        verificationId: verification._id,
+        question: q.q,
         profession,
-        answers: questions.map((q) => q.correct),
-        exp: Date.now() + 30 * 60 * 1000, // 30-minute session window
-      })
-    ).toString("base64");
-
-    const clientQuestions = questions.map(({ q, options, explanation }, idx) => ({
-      index: idx,
-      q,
-      options,
-      // explanation NOT sent to client — revealed after quiz
-    }));
+        options: q.options,
+        correctOption: q.correct,
+        explanation: q.explanation || "",
+        weight: 10,
+      }))
+    );
 
     return res.status(200).json({
       success: true,
-      message: `Quiz generated for ${profession} (${questions.length} questions)`,
+      message: `Quiz generated for ${profession} (${records.length} questions)`,
       data: {
-        sessionToken,
+        sessionToken: verification._id.toString(),
+        artisanId: artisan._id,
         profession,
-        totalQuestions: 10,
-        timePerQuestion: 30,
-        passingScore: 60,
-        questions: clientQuestions,
+        totalQuestions: records.length,
+        timePerQuestion: QUIZ_SECONDS_PER_QUESTION,
+        passingScore: QUIZ_PASSING_PERCENT,
+        questions: records.map((r, idx) => ({ index: idx, q: r.question, options: r.options })),
       },
     });
   } catch (error) {
@@ -413,50 +414,47 @@ async function startQuizVerification(req, res, next) {
 }
 
 /**
- * Submit Quiz Result — Evaluate answers and update verification status
- * POST /api/verifications/quiz/submit
- * Body: { artisanId, sessionToken, answers: [0,1,2,3,...] (10 integers), timedOut? }
+ * Grade a quiz session and update the artisan's verification status.
+ * POST /api/verifications/quiz/submit   Body: { sessionToken, answers: number[], timedOut? }
  */
 async function submitQuizResult(req, res, next) {
   try {
-    const { artisanId, sessionToken, answers = [], timedOut = false } = req.body || {};
+    const { sessionToken, answers = [], timedOut = false } = req.body || {};
+    if (!sessionToken) return fail(res, 400, "sessionToken is required");
 
-    if (!artisanId || !sessionToken) {
-      return res.status(400).json({ success: false, message: "artisanId and sessionToken are required" });
+    const owned = await loadOwnedVerification(req, sessionToken).catch(() => ({
+      status: 400,
+      message: "Invalid quiz session token",
+    }));
+    if (!owned.verification) return fail(res, owned.status, owned.message);
+    const { verification } = owned;
+
+    if (verification.reviewedBy !== QUIZ_ENGINE) return fail(res, 400, "Invalid quiz session token");
+    if (verification.status !== "pending") {
+      return fail(res, 409, "This quiz has already been submitted. Start a new quiz to retry.", {
+        code: "SESSION_CLOSED",
+      });
     }
 
-    // Decode session
-    let session;
-    try {
-      session = JSON.parse(Buffer.from(sessionToken, "base64").toString("utf8"));
-    } catch (e) {
-      return res.status(400).json({ success: false, message: "Invalid quiz session token" });
-    }
+    const artisan = await Professional.findById(verification.artisanId._id);
+    const expired = Date.now() - new Date(verification.startedAt).getTime() > QUIZ_SESSION_TTL_MS;
 
-    if (session.artisanId !== artisanId.toString()) {
-      return res.status(403).json({ success: false, message: "Session does not match artisan" });
-    }
+    if (timedOut || expired) {
+      verification.status = "failed";
+      verification.score = 0;
+      verification.completedAt = new Date();
+      verification.adminDecision = expired ? "EXPIRED — session window elapsed" : "TIMED OUT — retry allowed";
+      await verification.save();
 
-    if (Date.now() > session.exp) {
-      return res.status(400).json({ success: false, message: "Quiz session has expired. Please start a new quiz.", code: "SESSION_EXPIRED" });
-    }
-
-    const artisan = await Professional.findById(artisanId);
-    if (!artisan) {
-      return res.status(404).json({ success: false, message: "Artisan not found" });
-    }
-
-    // If timed out: reset and force retry
-    if (timedOut) {
       artisan.verificationAttempts = (artisan.verificationAttempts || 0) + 1;
       await artisan.save();
 
       return res.status(200).json({
         success: true,
         timedOut: true,
-        message: "Time expired on a question. Session reset. Please start a new quiz.",
+        message: "Time expired. Please start a new quiz.",
         data: {
-          artisanId,
+          artisanId: artisan._id,
           passed: false,
           score: 0,
           scorePercent: 0,
@@ -467,66 +465,58 @@ async function submitQuizResult(req, res, next) {
       });
     }
 
-    // Score the quiz
-    const correctAnswers = session.answers; // Array of correct indices [0-3]
+    const questions = await VerificationQuestion.find({ verificationId: verification._id }).sort({ _id: 1 });
     let correct = 0;
-    const detailed = correctAnswers.map((expected, idx) => {
-      const given = answers[idx];
+    const detailed = questions.map((q, idx) => {
+      const given = Number.isInteger(answers[idx]) ? answers[idx] : null;
+      const expected = Number(q.correctOption);
       const isCorrect = given === expected;
       if (isCorrect) correct++;
-      return { question: idx + 1, given, expected, isCorrect };
+      return { question: idx + 1, given, expected, isCorrect, explanation: q.explanation };
     });
 
-    const scorePercent = Math.round((correct / 10) * 100);
-    const passed = scorePercent >= 60;
+    const total = questions.length || QUIZ_QUESTION_COUNT;
+    const scorePercent = Math.round((correct / total) * 100);
+    const passed = scorePercent >= QUIZ_PASSING_PERCENT;
 
-    // Update artisan verification status
+    verification.status = passed ? "verified" : "failed";
+    verification.score = scorePercent;
+    verification.technicalAssessmentScore = scorePercent;
+    verification.completedAt = new Date();
+    verification.adminDecision = passed
+      ? `PASSED — Score: ${scorePercent}% (${correct}/${total} correct)`
+      : `FAILED — Score: ${scorePercent}% (${correct}/${total} correct) — Retry allowed`;
+    await verification.save();
+
     artisan.verificationAttempts = (artisan.verificationAttempts || 0) + 1;
-    artisan.verificationScore = scorePercent;
-
     if (passed) {
       artisan.verificationStatus = "verified";
       artisan.verifiedBadge = true;
+      artisan.verificationScore = scorePercent;
       artisan.verificationDate = new Date();
-    } else {
+    } else if (!artisan.verifiedBadge) {
+      // A failed retry never removes a badge that was already earned
       artisan.verificationStatus = "failed";
-      artisan.verifiedBadge = false;
     }
-
     await artisan.save();
-
-    // Create a Verification record
-    const verificationRecord = await Verification.create({
-      artisanId: artisan._id,
-      status: passed ? "verified" : "failed",
-      score: scorePercent,
-      completedAt: new Date(),
-      technicalAssessmentScore: scorePercent,
-      profileCompletenessScore: 0,
-      documentConsistencyScore: 0,
-      reviewedBy: "Skillora AI Quiz Engine",
-      adminDecision: passed
-        ? `PASSED — Score: ${scorePercent}% (${correct}/10 correct)`
-        : `FAILED — Score: ${scorePercent}% (${correct}/10 correct) — Retry allowed`,
-    });
 
     return res.status(200).json({
       success: true,
       message: passed
         ? `Congratulations! You scored ${scorePercent}% and earned the Skillora Verified Badge! ✓`
-        : `Score: ${scorePercent}%. You need 60% to pass. You may retry.`,
+        : `Score: ${scorePercent}%. You need ${QUIZ_PASSING_PERCENT}% to pass. You may retry.`,
       data: {
-        artisanId,
+        artisanId: artisan._id,
         passed,
         score: correct,
         scorePercent,
-        totalQuestions: 10,
-        passingThreshold: 60,
+        totalQuestions: total,
+        passingThreshold: QUIZ_PASSING_PERCENT,
         verificationStatus: artisan.verificationStatus,
         verifiedBadge: artisan.verifiedBadge,
         verificationDate: artisan.verificationDate,
         attempts: artisan.verificationAttempts,
-        verificationId: verificationRecord._id,
+        verificationId: verification._id,
         detailed,
       },
     });

@@ -1,5 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ImageCapturePicker from './ImageCapturePicker';
+import VerificationQuiz from './VerificationQuiz';
+import { BookingDialog } from './JobDialogs';
+import { api, avatarFor, formatDate, formatFCFA, mapProfessional, mapRequest } from '../api';
+
+const JOB_ACTIONS = {
+  PENDING: [
+    { status: 'ACCEPTED', fr: '✓ Accepter', en: '✓ Accept', cls: 'btn-primary-gold' },
+    { status: 'REJECTED', fr: '✕ Refuser', en: '✕ Decline', cls: 'btn-cancel-action' },
+  ],
+  ACCEPTED: [
+    { status: 'IN_PROGRESS', fr: '🛠️ Démarrer les travaux', en: '🛠️ Start work', cls: 'btn-primary-gold' },
+    { status: 'CANCELLED', fr: '✕ Annuler', en: '✕ Cancel', cls: 'btn-cancel-action' },
+  ],
+};
+
+const STATUS_LABELS = {
+  PENDING: { fr: '🟡 Nouvelle demande', en: '🟡 New request' },
+  ACCEPTED: { fr: '🟢 Acceptée', en: '🟢 Accepted' },
+  IN_PROGRESS: { fr: '🛠️ En cours', en: '🛠️ In progress' },
+  COMPLETED: { fr: '✓ Terminée', en: '✓ Completed' },
+  REJECTED: { fr: '✕ Refusée', en: '✕ Declined' },
+  CANCELLED: { fr: '✕ Annulée', en: '✕ Cancelled' },
+};
 
 export default function ArtisanDashboard({
   artisan,
@@ -16,264 +39,280 @@ export default function ArtisanDashboard({
   lang
 }) {
   const isFrench = lang === 'fr';
+  const tr = (fr, en) => (isFrench ? fr : en);
+  const profileId = artisanId || artisan?.id || currentUser?.professionalId || null;
 
-  // Determine if this is the artisan viewing their own profile or a client viewing read-only
+  // The artisan viewing their own profile (never true for the client read-only view)
   const isOwnProfile =
     !isReadOnly &&
-    currentUser &&
-    (currentUser.role === 'PROFESSIONAL' || userRole === 'PROFESSIONAL') &&
-    (!artisan || !artisan.id || artisan.id === currentUser.id || artisan.userId === currentUser.id);
+    currentUser?.role === 'PROFESSIONAL' &&
+    Boolean(profileId) &&
+    String(profileId) === String(currentUser.professionalId);
+  const effectiveReadOnly = !isOwnProfile;
+  const isCustomer = currentUser?.role === 'CUSTOMER';
 
-  // Strict read-only mode for client view
-  const effectiveReadOnly = isReadOnly || !isOwnProfile;
+  // Show the card data we already have immediately, then refresh from the API
+  const [profile, setProfile] = useState(() => (artisan ? artisan : null));
+  const [loadError, setLoadError] = useState('');
 
-  // Local state for dynamically fetched artisan data if artisanId is provided
-  const [loadedArtisan, setLoadedArtisan] = useState(artisan || null);
-
-  // Fetch dynamic artisan data if ID is passed
-  useEffect(() => {
-    if (artisan) {
-      setLoadedArtisan(artisan);
-    } else if (artisanId) {
-      fetch(`/api/professionals/${artisanId}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && data.success && data.data) {
-            setLoadedArtisan(data.data);
-          }
-        })
-        .catch(() => {});
+  const loadProfile = useCallback(async () => {
+    if (!profileId) return;
+    try {
+      const res = await api(`/professionals/${profileId}`, { auth: false });
+      setProfile(mapProfessional(res.data));
+      setLoadError('');
+    } catch (err) {
+      setLoadError(err.message);
     }
-  }, [artisan, artisanId]);
+  }, [profileId]);
 
-  const effectiveData = loadedArtisan || currentUser || {};
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
+
+  // Owner: incoming jobs
+  const [jobs, setJobs] = useState([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [busyJobId, setBusyJobId] = useState(null);
+
+  const loadJobs = useCallback(async () => {
+    if (!isOwnProfile) return;
+    setJobsLoading(true);
+    try {
+      const [reqRes, payRes] = await Promise.all([api('/requests'), api('/payments/history')]);
+      const mine = (reqRes.data || []).filter(
+        (r) => String(r.professionalId?._id || r.professionalId) === String(profileId)
+      );
+      setJobs(mine.map((r) => mapRequest(r, payRes.data || [])));
+    } catch (err) {
+      triggerToast?.(err.message, '⚠️');
+    } finally {
+      setJobsLoading(false);
+    }
+  }, [isOwnProfile, profileId, triggerToast]);
+
+  useEffect(() => {
+    loadJobs();
+  }, [loadJobs]);
+
+  // Client: bookmark state
+  const [isFavorite, setIsFavorite] = useState(false);
+  useEffect(() => {
+    if (!isCustomer || !profileId) return;
+    api('/bookmarks')
+      .then((res) =>
+        setIsFavorite((res.data || []).some((b) => String(b.professionalId?._id || b.professionalId) === String(profileId)))
+      )
+      .catch(() => {});
+  }, [isCustomer, profileId]);
 
   // Scroll detection for collapsible solid header
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(false);
   const [showWatermark, setShowWatermark] = useState(true);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showAddPortfolioModal, setShowAddPortfolioModal] = useState(false);
-
-  // Default fallback gallery
-  const defaultGallery = [
-    { id: 1, title: isFrench ? 'Rénovation Salle de Bain de Luxe' : 'Luxury Bathroom Renovation', img: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80' },
-    { id: 2, title: isFrench ? 'Centrale de Chauffage Villa Bastos' : 'Villa Heating Central System', img: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=800&q=80' },
-    { id: 3, title: isFrench ? 'Installation Tuyauterie Inox Industrielle' : 'Industrial Stainless Steel Piping', img: 'https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&w=800&q=80' },
-    { id: 4, title: isFrench ? 'Raccordement Chauffe-eau Solaire' : 'Solar Water Heater Installation', img: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80' },
-    { id: 5, title: isFrench ? 'Système de Pompage et Filtration' : 'Water Pumping & Filtration Unit', img: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=800&q=80' },
-    { id: 6, title: isFrench ? 'Pose Colonne de Douche Italienne' : 'Walk-in Shower Fixture Mounting', img: 'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=800&q=80' },
-    { id: 7, title: isFrench ? 'Diagnostic Caméra Réseau Enterré' : 'Underground Pipe Inspection Camera', img: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=800&q=80' },
-    { id: 8, title: isFrench ? 'Réseau Incendie Armé (RIA)' : 'Fire Hydrant & Safety Hose Line', img: 'https://images.unsplash.com/photo-1541888946425-d0fbb18086f6?auto=format&fit=crop&w=800&q=80' },
-    { id: 9, title: isFrench ? 'Adoucisseur d’Eau Résidentiel' : 'Residential Water Softener Tank', img: 'https://images.unsplash.com/photo-1517646287270-a5a9ca602e5c?auto=format&fit=crop&w=800&q=80' },
-    { id: 10, title: isFrench ? 'Robinetterie encastrée design' : 'Concealed Designer Wall Taps', img: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80' }
-  ];
-
-  // Cover photo & Portfolio state
-  const [coverPhoto, setCoverPhoto] = useState(
-    effectiveData?.coverPhoto ||
-      effectiveData?.image ||
-      'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=1600&q=85'
-  );
-  const [galleryItems, setGalleryItems] = useState(
-    effectiveData?.gallery && effectiveData.gallery.length > 0 ? effectiveData.gallery : defaultGallery
-  );
+  const [showBooking, setShowBooking] = useState(false);
+  const [showQuiz, setShowQuiz] = useState(false);
 
   const [newPortfolioTitle, setNewPortfolioTitle] = useState('');
   const [newPortfolioImg, setNewPortfolioImg] = useState('');
 
   // New review form state
-  const [newReviewerName, setNewReviewerName] = useState('');
   const [newRating, setNewRating] = useState(5);
   const [newReviewComment, setNewReviewComment] = useState('');
-
-  // Update cover and gallery when effectiveData updates
-  useEffect(() => {
-    if (effectiveData?.coverPhoto || effectiveData?.image) {
-      setCoverPhoto(effectiveData.coverPhoto || effectiveData.image);
-    }
-    if (effectiveData?.gallery && effectiveData.gallery.length > 0) {
-      setGalleryItems(effectiveData.gallery);
-    }
-  }, [effectiveData]);
+  const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 180) {
-        setIsScrolled(true);
-      } else {
-        setIsScrolled(false);
-      }
-    };
+    const handleScroll = () => setIsScrolled(window.scrollY > 180);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Profile data computed dynamically
-  const artisanName = effectiveData?.name || effectiveData?.fullName || (effectiveData?.firstName ? `${effectiveData.firstName} ${effectiveData.lastName || ''}` : 'Derreck plomb');
-  const businessName = effectiveData?.businessName || (effectiveData?.profession ? `${effectiveData.profession} • ${artisanName}` : `${artisanName} Pro Services`);
-  const primaryService = effectiveData?.profession || (isFrench ? 'Plomberie Sanitaire & Chauffage Industriel' : 'Sanitary Plumbing & Industrial Heating');
-  const locationText = effectiveData?.city || effectiveData?.location || 'Yaoundé (Bastos)';
-  const yearsExperience = effectiveData?.experience ? (typeof effectiveData.experience === 'number' ? `${effectiveData.experience} ans` : effectiveData.experience) : '05 ans';
-  const phoneContact = effectiveData?.phone || '+237 699 88 77 66';
-  const whatsappNumber = effectiveData?.whatsapp ? String(effectiveData.whatsapp).replace(/\+/g, '') : '237699887766';
-  const artisanRating = effectiveData?.rating || 5.0;
-  const artisanReviewsCount = effectiveData?.reviews || effectiveData?.reviewCount || 38;
-  const artisanBadge = effectiveData?.badge || (effectiveData?.verified !== false ? 'PRO MASTER VÉRIFIÉ' : 'NOUVEAU PRO');
-  const artisanStructure = effectiveData?.type || (effectiveData?.isWorkshop ? 'Atelier Groupé' : 'Single Artisan (Master Specialist)');
+  const data = profile || {};
+  const artisanName = data.name || currentUser?.name || '';
+  const businessName = data.businessName || '';
+  const primaryService = data.profession || tr('Artisan', 'Artisan');
+  const locationText = data.city || tr('Localisation non précisée', 'Location not set');
+  const yearsExperience = data.experience || '—';
+  const phoneContact = data.phone || '';
+  const whatsappNumber = data.whatsapp || '';
+  const artisanRating = data.rating ? Number(data.rating).toFixed(1) : '—';
+  const artisanReviewsCount = data.reviews || 0;
+  const artisanBadge = data.verified ? tr('ARTISAN VÉRIFIÉ', 'VERIFIED ARTISAN') : tr('NON VÉRIFIÉ', 'NOT VERIFIED');
+  const artisanStructure = data.isGrouped ? tr('Atelier Groupé', 'Workshop') : tr('Artisan Indépendant', 'Independent Artisan');
+  const coverPhoto = data.coverPhoto;
+  const galleryItems = data.gallery || [];
+  const skills = data.skills || [];
+  const reviews = (data.reviewList || []).map((r) => {
+    const reviewer = r.customerId && typeof r.customerId === 'object' ? r.customerId : {};
+    const reviewerName = `${reviewer.firstName || ''} ${reviewer.lastName ? `${reviewer.lastName[0]}.` : ''}`.trim() || tr('Client', 'Client');
+    return {
+      id: r._id,
+      name: reviewerName,
+      avatar: reviewer.profileImage || avatarFor(reviewerName),
+      date: formatDate(r.createdAt, lang),
+      rating: Math.round(r.rating || 0),
+      comment: r.comment || '',
+    };
+  });
 
-  // Skills
-  const defaultSkills = isFrench
-    ? ['Tuyauterie Cuivre & Multicouche', 'Dépannage Fuite d’Urgence', 'Chauffe-eau Solaire', 'Assainissement & Vidange', 'Robinetterie Luxe', 'Raccordement Haute Pression']
-    : ['Copper & Multilayer Piping', 'Emergency Leak Repair', 'Solar Water Heaters', 'Sanitation & Drainage', 'Luxury Faucets & Fixtures', 'High Pressure Fitting'];
-  const skills = Array.isArray(effectiveData?.skills) && effectiveData.skills.length > 0 ? effectiveData.skills : defaultSkills;
-
-  // Reviews list
-  const [reviews, setReviews] = useState([
-    {
-      id: 1,
-      name: 'Dr. Sophie Mbianda',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-      date: isFrench ? 'Il y a 2 jours' : '2 days ago',
-      rating: 5,
-      comment: isFrench
-        ? `Travail exceptionnel pour le raccordement complet de ma villa. ${artisanName} est ponctuel, méticuleux et très propre sur le chantier. Je recommande vivement !`
-        : `Exceptional workmanship on the complete installation. ${artisanName} was punctual, meticulous, and kept the site clean. Highly recommended!`
-    },
-    {
-      id: 2,
-      name: 'Christian Kamga',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-      date: isFrench ? 'Il y a 1 semaine' : '1 week ago',
-      rating: 5,
-      comment: isFrench
-        ? 'Dépannage d’urgence un dimanche soir pour une grosse fuite sous dalle. Arrivé en 30 minutes, réparation impeccable avec garantie séquestre Skillora respectée.'
-        : 'Emergency repair on a Sunday evening for a severe underground leak. Arrived within 30 minutes, flawless fix with Skillora escrow respected.'
-    },
-    {
-      id: 3,
-      name: 'Mireille Tchinda',
-      avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&q=80',
-      date: isFrench ? 'Il y a 2 semaines' : '2 weeks ago',
-      rating: 5,
-      comment: isFrench
-        ? 'Installation impeccable de notre chauffe-eau solaire et des mitigeurs thermostatiques. Excellent rapport qualité-prix en FCFA.'
-        : 'Flawless setup of our solar water heater and thermostatic mixers. Great value for money in FCFA.'
+  const toggleFavorite = async () => {
+    if (!isCustomer) {
+      triggerToast?.(tr('Connectez-vous en tant que client pour ajouter des favoris.', 'Log in as a client to bookmark artisans.'), 'ℹ️');
+      return;
     }
-  ]);
-
-  const toggleFavorite = () => {
-    const nextState = !isFavorite;
-    setIsFavorite(nextState);
-    if (triggerToast) {
-      triggerToast(
-        nextState
-          ? (isFrench ? `${artisanName} ajouté à vos favoris ❤️` : `${artisanName} added to favorites ❤️`)
-          : (isFrench ? 'Retiré de vos favoris' : 'Removed from favorites'),
-        nextState ? '❤️' : '🤍'
+    try {
+      const res = await api('/bookmarks/toggle', { method: 'POST', body: { professionalId: profileId } });
+      setIsFavorite(res.isBookmarked);
+      triggerToast?.(
+        res.isBookmarked ? tr(`${artisanName} ajouté à vos favoris ❤️`, `${artisanName} added to favorites ❤️`) : tr('Retiré de vos favoris', 'Removed from favorites'),
+        res.isBookmarked ? '❤️' : '🤍'
       );
+    } catch (err) {
+      triggerToast?.(err.message, '⚠️');
     }
   };
 
   const handleCall = () => {
+    if (!phoneContact) return;
     window.location.href = `tel:${phoneContact.replace(/\s+/g, '')}`;
   };
 
   const handleWhatsApp = () => {
+    if (!whatsappNumber) {
+      triggerToast?.(tr("Cet artisan n'a pas encore de numéro WhatsApp.", 'This artisan has no WhatsApp number yet.'), 'ℹ️');
+      return;
+    }
     const msg = encodeURIComponent(
-      isFrench
-        ? `Bonjour ${artisanName}, je vous contacte depuis votre profil certifié Skillora au sujet de vos prestations.`
-        : `Hello ${artisanName}, I am contacting you from your certified Skillora profile regarding your services.`
+      tr(
+        `Bonjour ${artisanName}, je vous contacte depuis votre profil Skillora au sujet de vos prestations.`,
+        `Hello ${artisanName}, I am contacting you from your Skillora profile regarding your services.`
+      )
     );
-    window.open(`https://wa.me/${whatsappNumber}?text=${msg}`, '_blank');
+    window.open(`https://wa.me/${whatsappNumber}?text=${msg}`, '_blank', 'noopener');
   };
 
   const handleShare = () => {
+    const text = tr(`Découvrez le profil de ${artisanName} (${primaryService}) sur Skillora.`, `Check out ${artisanName} (${primaryService}) on Skillora.`);
     if (navigator.share) {
-      navigator.share({
-        title: `${artisanName} - ${primaryService}`,
-        text: `Découvrez le profil certifié de ${artisanName} sur Skillora.`,
-        url: window.location.href
-      }).catch(() => {});
+      navigator.share({ title: `${artisanName} - ${primaryService}`, text }).catch(() => {});
     } else {
-      navigator.clipboard.writeText(window.location.href);
-      if (triggerToast) {
-        triggerToast(
-          isFrench ? 'Lien du profil copié dans le presse-papiers !' : 'Profile link copied to clipboard!',
-          '🔗'
-        );
-      }
+      navigator.clipboard?.writeText(text);
+      triggerToast?.(tr('Présentation du profil copiée !', 'Profile summary copied!'), '🔗');
     }
   };
 
   const handleBookNow = () => {
-    if (triggerToast) {
-      triggerToast(
-        isFrench
-          ? `Demande d'intervention envoyée à ${artisanName} !`
-          : `Service booking request sent to ${artisanName}!`,
-        '⭐'
-      );
+    if (!isCustomer) {
+      triggerToast?.(tr('Connectez-vous en tant que client pour réserver.', 'Log in as a client to book.'), 'ℹ️');
+      return;
+    }
+    setShowBooking(true);
+  };
+
+  const saveProfile = async (changes, successMsg) => {
+    try {
+      const res = await api(`/professionals/${profileId}`, { method: 'PUT', body: changes });
+      setProfile(mapProfessional({ ...res.data, userId: profile?.userId && typeof profile.userId === 'object' ? profile.userId : res.data.userId }));
+      await loadProfile();
+      if (successMsg) triggerToast?.(successMsg, '✓');
+      return true;
+    } catch (err) {
+      triggerToast?.(err.message, '⚠️');
+      return false;
     }
   };
 
-  const handleCoverPhotoChange = (newUrl) => {
+  // The picker uploads through /upload/artisan-cover, which saves it on the profile
+  const handleCoverPhotoChange = () => {
     if (effectiveReadOnly) return;
-    setCoverPhoto(newUrl);
-    if (triggerToast) {
-      triggerToast(isFrench ? 'Photo de couverture mise à jour !' : 'Cover photo updated!', '✓');
-    }
+    loadProfile();
   };
 
-  const handleAddPortfolioItem = (e) => {
+  const toPortfolio = (items) => items.map(({ title, img }) => ({ title, img }));
+
+  const handleAddPortfolioItem = async (e) => {
     e.preventDefault();
     if (effectiveReadOnly) return;
     if (!newPortfolioImg) {
-      if (triggerToast) triggerToast(isFrench ? 'Veuillez choisir ou prendre une photo' : 'Please select or capture a photo', '⚠️');
+      triggerToast?.(tr('Veuillez choisir ou prendre une photo', 'Please select or capture a photo'), '⚠️');
       return;
     }
-
-    const newItem = {
-      id: Date.now(),
-      title: newPortfolioTitle.trim() || (isFrench ? 'Nouvelle réalisation' : 'New Project Work'),
-      img: newPortfolioImg
-    };
-
-    setGalleryItems([newItem, ...galleryItems]);
-    setShowAddPortfolioModal(false);
-    setNewPortfolioTitle('');
-    setNewPortfolioImg('');
-    if (triggerToast) triggerToast(isFrench ? 'Nouvelle photo ajoutée à votre galerie !' : 'New project photo added to portfolio!', '✓');
+    const item = { title: newPortfolioTitle.trim() || tr('Nouvelle réalisation', 'New project'), img: newPortfolioImg };
+    const ok = await saveProfile(
+      { portfolio: [item, ...toPortfolio(galleryItems)] },
+      tr('Nouvelle photo ajoutée à votre galerie !', 'New project photo added to portfolio!')
+    );
+    if (ok) {
+      setShowAddPortfolioModal(false);
+      setNewPortfolioTitle('');
+      setNewPortfolioImg('');
+    }
   };
 
-  const handleRemovePortfolioItem = (id, title) => {
+  const handleRemovePortfolioItem = async (id) => {
     if (effectiveReadOnly) return;
-    setGalleryItems(galleryItems.filter((item) => item.id !== id));
-    if (triggerToast) triggerToast(isFrench ? `Photo supprimée de la galerie` : `Photo removed from gallery`, '🗑️');
+    if (!window.confirm(tr('Supprimer cette photo de votre galerie ?', 'Remove this photo from your portfolio?'))) return;
+    await saveProfile(
+      { portfolio: toPortfolio(galleryItems.filter((item) => item.id !== id)) },
+      tr('Photo supprimée de la galerie', 'Photo removed from gallery')
+    );
   };
 
-  const handleAddReview = (e) => {
+  const handleAddReview = async (e) => {
     e.preventDefault();
-    if (!newReviewerName.trim() || !newReviewComment.trim()) {
-      if (triggerToast) triggerToast(isFrench ? 'Veuillez renseigner votre nom et votre avis' : 'Please provide your name and review', '⚠️');
+    if (!newReviewComment.trim()) {
+      triggerToast?.(tr('Veuillez écrire votre avis', 'Please write your review'), '⚠️');
       return;
     }
-
-    const newRev = {
-      id: Date.now(),
-      name: newReviewerName.trim(),
-      avatar: currentUser?.profileImage || currentUser?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-      date: isFrench ? 'À l’instant' : 'Just now',
-      rating: newRating,
-      comment: newReviewComment.trim()
-    };
-
-    setReviews([newRev, ...reviews]);
-    setShowReviewModal(false);
-    setNewReviewerName('');
-    setNewReviewComment('');
-    if (triggerToast) triggerToast(isFrench ? 'Votre avis a été publié avec succès !' : 'Review published successfully!', '✓');
+    setIsSending(true);
+    try {
+      await api('/reviews', {
+        method: 'POST',
+        body: { professionalId: profileId, rating: newRating, comment: newReviewComment.trim() },
+      });
+      setShowReviewModal(false);
+      setNewReviewComment('');
+      setNewRating(5);
+      triggerToast?.(tr('Votre avis a été publié avec succès !', 'Review published successfully!'), '✓');
+      loadProfile();
+    } catch (err) {
+      triggerToast?.(err.message, '⚠️');
+    } finally {
+      setIsSending(false);
+    }
   };
+
+  const handleJobAction = async (job, status) => {
+    setBusyJobId(job.id);
+    try {
+      await api(`/requests/${job.id}`, { method: 'PUT', body: { status } });
+      triggerToast?.(tr('Mission mise à jour.', 'Job updated.'), '✓');
+      await loadJobs();
+    } catch (err) {
+      triggerToast?.(err.message, '⚠️');
+    } finally {
+      setBusyJobId(null);
+    }
+  };
+
+  const activeJobs = jobs.filter((j) => ['PENDING', 'ACCEPTED', 'IN_PROGRESS'].includes(j.status));
+  const pastJobs = jobs.filter((j) => !['PENDING', 'ACCEPTED', 'IN_PROGRESS'].includes(j.status)).slice(0, 10);
+
+  if (!profile) {
+    return (
+      <div className="artisan-dashboard-container" style={{ padding: '6rem 1rem', textAlign: 'center' }}>
+        <p style={{ color: 'var(--text-dim)' }}>
+          {loadError ? `⚠️ ${loadError}` : tr('Chargement du profil…', 'Loading profile…')}
+        </p>
+        {onBack && (
+          <button type="button" className="btn-outline" onClick={onBack} style={{ marginTop: '1rem' }}>
+            ← {tr('Retour', 'Back')}
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="artisan-dashboard-container">
@@ -322,10 +361,14 @@ export default function ArtisanDashboard({
       {effectiveReadOnly && (
         <div className="read-only-client-banner">
           <div className="read-only-banner-content">
-            <span className="read-only-badge-icon">🛡️</span>
+            <span className="read-only-badge-icon">{data.verified ? '🛡️' : '👤'}</span>
             <div>
-              <strong>{isFrench ? 'PROFIL VÉRIFIÉ PAR SKILLORA' : 'SKILLORA VERIFIED ARTISAN PROFILE'}</strong>
-              <span> • {isFrench ? 'Accès Client en Lecture Seule (Identité, Compétences & Séquestre Certifiés)' : 'Read-Only Client Access (Certified Identity & Escrow)'}</span>
+              <strong>
+                {data.verified
+                  ? tr('PROFIL VÉRIFIÉ PAR SKILLORA', 'SKILLORA VERIFIED ARTISAN')
+                  : tr('ARTISAN INDÉPENDANT', 'INDEPENDENT ARTISAN')}
+              </strong>
+              <span> • {tr('Paiement protégé par séquestre Skillora', 'Payment protected by Skillora escrow')}</span>
             </div>
           </div>
           <button type="button" className="btn-book-header-compact" onClick={handleBookNow}>
@@ -348,6 +391,7 @@ export default function ArtisanDashboard({
             <ImageCapturePicker
               value={coverPhoto}
               onChange={handleCoverPhotoChange}
+              uploadPath="/upload/artisan-cover"
               triggerToast={triggerToast}
               label={isFrench ? "Photo de couverture de l'artisan" : "Artisan Cover Photo"}
               aspectRatio="banner"
@@ -357,7 +401,7 @@ export default function ArtisanDashboard({
         )}
 
         {/* Verified Watermark Tag (Static & read-only for clients) */}
-        {showWatermark && (
+        {showWatermark && data.verified && (
           <div className="hero-watermark-tag">
             <span className="watermark-shield">🛡️</span>
             <span className="watermark-text">SKILLORA VERIFIED EXPERT • CAMEROON</span>
@@ -365,7 +409,7 @@ export default function ArtisanDashboard({
         )}
 
         {/* Watermark toggle button ONLY for owner artisan */}
-        {!effectiveReadOnly && (
+        {!effectiveReadOnly && data.verified && (
           <button
             type="button"
             className="watermark-toggle-btn"
@@ -401,12 +445,14 @@ export default function ArtisanDashboard({
             {/* STRICT READ-ONLY CHECK: Escrow Balance shortcut is ONLY displayed for the artisan themselves */}
             {!effectiveReadOnly ? (
               <div className="wallet-shortcut-box" onClick={onOpenWallet} title={isFrench ? 'Ouvrir portefeuille' : 'Open Wallet'}>
-                <span className="wallet-mini-lbl">{isFrench ? 'Solde Escrow' : 'Escrow Balance'}</span>
-                <span className="wallet-mini-val">{(walletBalance || 0).toLocaleString()} FCFA</span>
+                <span className="wallet-mini-lbl">{tr('Gains cumulés', 'Total earnings')}</span>
+                <span className="wallet-mini-val">{formatFCFA(walletBalance)}</span>
               </div>
             ) : (
               <div className="client-booking-shortcut-box">
-                <span className="booking-status-tag">✓ {isFrench ? 'Disponible Immédiatement' : 'Available Now'}</span>
+                <span className="booking-status-tag">
+                  {data.isAvailable ? `✓ ${tr('Disponible', 'Available')}` : `⏸ ${tr('Indisponible pour le moment', 'Currently unavailable')}`}
+                </span>
                 <button type="button" className="btn-primary-gold-book" onClick={handleBookNow}>
                   ⚡ {isFrench ? 'Demander un Devis' : 'Request Quote'}
                 </button>
@@ -417,20 +463,131 @@ export default function ArtisanDashboard({
           <div className="artisan-subinfo-row">
             <span className="artisan-author-name">👤 {artisanName}</span>
             <span className="artisan-location-pin">📍 {locationText}</span>
-            <span className="artisan-verified-pill">✓ {artisanBadge}</span>
+            <span className="artisan-verified-pill">{data.verified ? '✓ ' : ''}{artisanBadge}</span>
             <span className="artisan-type-pill">🏢 {artisanStructure}</span>
           </div>
         </div>
 
+        {/* OWNER: verification call-to-action */}
+        {isOwnProfile && !data.verified && (
+          <section className="dashboard-section-block">
+            <div className="payment-security-banner">
+              <div>
+                <h2>🛡️ {tr('Obtenez le Badge Vérifié', 'Earn the Verified Badge')}</h2>
+                <p>
+                  {tr(
+                    'Répondez à 10 questions sur votre métier (60% pour réussir). Les artisans vérifiés apparaissent dans le filtre « Vérifié » et inspirent davantage confiance.',
+                    'Answer 10 questions about your trade (60% to pass). Verified artisans appear in the "Verified" filter and earn more trust.'
+                  )}
+                </p>
+              </div>
+              <button type="button" className="btn-primary-gold" onClick={() => setShowQuiz(true)}>
+                {tr('Passer le quiz →', 'Take the quiz →')}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* OWNER: incoming jobs */}
+        {isOwnProfile && (
+          <section className="dashboard-section-block">
+            <div className="section-header-flex">
+              <div>
+                <h2 className="section-title-sm">📋 {tr('Mes Missions', 'My Jobs')} ({activeJobs.length})</h2>
+                <p className="section-subtitle-hint">
+                  {tr('Acceptez les demandes, démarrez les travaux ; le client valide la fin et le paiement vous est versé.', 'Accept requests and start work; the client confirms completion and you get paid.')}
+                </p>
+              </div>
+              <button type="button" className="btn-outline" onClick={loadJobs} disabled={jobsLoading}>
+                🔄 {tr('Actualiser', 'Refresh')}
+              </button>
+            </div>
+
+            {jobsLoading && jobs.length === 0 ? (
+              <p className="section-subtitle-hint">{tr('Chargement…', 'Loading…')}</p>
+            ) : activeJobs.length === 0 ? (
+              <p className="section-subtitle-hint">{tr('Aucune mission en cours pour le moment.', 'No active jobs right now.')}</p>
+            ) : (
+              <div className="orders-stack-list">
+                {activeJobs.map((job) => (
+                  <div key={job.id} className="client-order-card">
+                    <div className="order-header-row">
+                      <div>
+                        <span className="order-id-pill">{job.ref} • {tr(STATUS_LABELS[job.status].fr, STATUS_LABELS[job.status].en)}</span>
+                        <h3 className="order-service-title">{job.description}</h3>
+                        <p className="order-meta-info">
+                          👤 <strong>{job.customerName || tr('Client', 'Client')}</strong> • 📍 {job.location || '—'} • 🕒 {formatDate(job.date, lang)}
+                        </p>
+                      </div>
+                      <div className="order-amount-box">
+                        {job.payment ? (
+                          <>
+                            <span className="amount-num">{formatFCFA(job.payment.artisanAmount)}</span>
+                            <span className="escrow-locked-badge">
+                              {job.escrowLocked ? `🔒 ${tr('Payé — en séquestre', 'Paid — in escrow')}` : `⏳ ${tr('Paiement en attente', 'Payment pending')}`}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="escrow-locked-badge">{tr('Non payé', 'Not paid yet')}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="order-actions-bar">
+                      {job.customerWhatsapp && (
+                        <button type="button" className="btn-whatsapp-action" onClick={() => window.open(`https://wa.me/${job.customerWhatsapp}`, '_blank', 'noopener')}>
+                          💬 WhatsApp
+                        </button>
+                      )}
+                      {(JOB_ACTIONS[job.status] || []).map((action) => (
+                        <button
+                          key={action.status}
+                          type="button"
+                          className={action.cls}
+                          disabled={busyJobId === job.id}
+                          onClick={() => handleJobAction(job, action.status)}
+                        >
+                          {tr(action.fr, action.en)}
+                        </button>
+                      ))}
+                      {job.status === 'IN_PROGRESS' && (
+                        <span className="order-meta-info">⏳ {tr('En attente de la validation du client', 'Waiting for client confirmation')}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {pastJobs.length > 0 && (
+              <details style={{ marginTop: '1rem' }}>
+                <summary className="section-subtitle-hint" style={{ cursor: 'pointer' }}>
+                  {tr('Historique', 'History')} ({pastJobs.length})
+                </summary>
+                <ul style={{ marginTop: '0.5rem', paddingLeft: '1rem' }}>
+                  {pastJobs.map((job) => (
+                    <li key={job.id} className="order-meta-info">
+                      {job.ref} — {job.description.slice(0, 60)} — {tr(STATUS_LABELS[job.status].fr, STATUS_LABELS[job.status].en)}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </section>
+        )}
+
         {/* 4. Skill Tags Section (Strictly Read-Only) */}
         <section className="dashboard-section-block">
-          <h2 className="section-title-sm">{isFrench ? 'Compétences & Spécialités Certifiées' : 'Certified Skills & Specializations'}</h2>
+          <h2 className="section-title-sm">{tr('Compétences & Spécialités', 'Skills & Specializations')}</h2>
           <div className="skill-pills-container">
-            {skills.map((skill, idx) => (
-              <span key={idx} className="skill-pill-tag">
-                {skill}
-              </span>
-            ))}
+            {skills.length === 0 ? (
+              <span className="section-subtitle-hint">{tr('Aucune compétence renseignée.', 'No skills listed yet.')}</span>
+            ) : (
+              skills.map((skill, idx) => (
+                <span key={idx} className="skill-pill-tag">
+                  {skill}
+                </span>
+              ))
+            )}
           </div>
         </section>
 
@@ -438,15 +595,13 @@ export default function ArtisanDashboard({
         <section className="dashboard-section-block">
           <h2 className="section-title-sm">{isFrench ? 'À Propos de l’Artisan' : 'About the Professional'}</h2>
           <div className="about-text-container">
-            {effectiveData?.bio ? (
-              <p>{effectiveData.bio}</p>
-            ) : isFrench ? (
-              <p>
-                Bonjour ! Je suis un <strong>{primaryService.toLowerCase()}</strong> certifié basé à <strong>{locationText}</strong>, spécialisé dans l’<strong>installation complète</strong> et les interventions techniques professionnelles. Grâce à une expertise de <strong>{yearsExperience}</strong> dans le bâtiment et la maintenance au Cameroun, j’assure des travaux soignés avec <strong>garantie décennale et séquestre sécurisé Skillora en Franc CFA</strong>.
-              </p>
+            {data.bio ? (
+              <p>{data.bio}</p>
             ) : (
-              <p>
-                Welcome! I am a certified <strong>{primaryService}</strong> based in <strong>{locationText}</strong>, specializing in high-grade infrastructure and technical interventions. With <strong>{yearsExperience}</strong> of proven field experience, I provide reliable, top-quality services backed by the <strong>Skillora Escrow Guarantee in Franc CFA</strong>.
+              <p className="section-subtitle-hint">
+                {isOwnProfile
+                  ? tr('Ajoutez une présentation depuis ⚙️ Paramètres pour rassurer vos clients.', 'Add a bio from ⚙️ Settings to reassure your clients.')
+                  : tr(`${artisanName} n'a pas encore rédigé de présentation.`, `${artisanName} has not written a bio yet.`)}
               </p>
             )}
           </div>
@@ -460,11 +615,13 @@ export default function ArtisanDashboard({
           </div>
 
           <div className="quick-action-row">
-            <button type="button" className="quick-action-card-btn call-action" onClick={handleCall}>
-              <span className="btn-action-icon">📞</span>
-              <span className="btn-action-label">{isFrench ? 'Appeler' : 'Call'}</span>
-              <span className="btn-action-sub">{phoneContact}</span>
-            </button>
+            {phoneContact && (
+              <button type="button" className="quick-action-card-btn call-action" onClick={handleCall}>
+                <span className="btn-action-icon">📞</span>
+                <span className="btn-action-label">{isFrench ? 'Appeler' : 'Call'}</span>
+                <span className="btn-action-sub">{phoneContact}</span>
+              </button>
+            )}
 
             <button type="button" className="quick-action-card-btn whatsapp-action" onClick={handleWhatsApp}>
               <span className="btn-action-icon">💬</span>
@@ -504,6 +661,14 @@ export default function ArtisanDashboard({
             )}
           </div>
 
+          {galleryItems.length === 0 && (
+            <p className="section-subtitle-hint">
+              {isOwnProfile
+                ? tr('Ajoutez des photos de vos chantiers pour convaincre vos futurs clients.', 'Add photos of your work to win new clients.')
+                : tr('Aucune réalisation publiée pour le moment.', 'No portfolio photos yet.')}
+            </p>
+          )}
+
           <div className="gallery-two-col-grid">
             {galleryItems.map((item) => (
               <div key={item.id} className="gallery-item-card">
@@ -537,18 +702,24 @@ export default function ArtisanDashboard({
             <div>
               <h2 className="section-title-sm">{isFrench ? 'Avis & Témoignages Clients' : 'Client Reviews'}</h2>
               <p className="reviews-sub-count">
-                ★ {artisanRating} • {reviews.length} {isFrench ? 'retours d’expérience vérifiés' : 'verified client reviews'}
+                ★ {artisanRating} • {reviews.length} {tr('avis de clients ayant réservé', 'reviews from booked clients')}
               </p>
             </div>
 
-            <button
-              type="button"
-              className="btn-write-review"
-              onClick={() => setShowReviewModal(true)}
-            >
-              ✍️ {isFrench ? 'Rédiger un Avis' : 'Write a Review'}
-            </button>
+            {isCustomer && (
+              <button
+                type="button"
+                className="btn-write-review"
+                onClick={() => setShowReviewModal(true)}
+              >
+                ✍️ {isFrench ? 'Rédiger un Avis' : 'Write a Review'}
+              </button>
+            )}
           </div>
+
+          {reviews.length === 0 && (
+            <p className="section-subtitle-hint">{tr('Pas encore d’avis.', 'No reviews yet.')}</p>
+          )}
 
           <div className="reviews-vertical-list">
             {reviews.map((rev) => (
@@ -574,7 +745,7 @@ export default function ArtisanDashboard({
           <div className="client-sticky-cta-bar">
             <div className="cta-artisan-info">
               <span className="cta-name">{artisanName}</span>
-              <span className="cta-price">{effectiveData?.priceRate || '15 000 FCFA / intervention'}</span>
+              <span className="cta-price">{data.priceRate || tr('Sur devis', 'On quote')}</span>
             </div>
             <div className="cta-actions-group">
               <button type="button" className="btn-cta-whatsapp" onClick={handleWhatsApp}>
@@ -598,17 +769,12 @@ export default function ArtisanDashboard({
             </div>
 
             <form onSubmit={handleAddReview}>
-              <div className="form-group-item">
-                <label>{isFrench ? 'Votre Nom / Titre' : 'Your Name / Title'}</label>
-                <input
-                  type="text"
-                  placeholder={currentUser?.name || (isFrench ? 'ex: Valérie M.' : 'e.g. Valerie M.')}
-                  value={newReviewerName}
-                  onChange={(e) => setNewReviewerName(e.target.value)}
-                  className="modal-text-input"
-                  required
-                />
-              </div>
+              <p className="modal-subtext">
+                {tr(
+                  'Seuls les clients ayant une mission terminée avec cet artisan peuvent laisser un avis (un avis par mission).',
+                  'Only clients with a completed job with this artisan can review (one review per job).'
+                )}
+              </p>
 
               <div className="form-group-item">
                 <label>{isFrench ? 'Note d’évaluation' : 'Rating Score'}</label>
@@ -645,8 +811,8 @@ export default function ArtisanDashboard({
                 >
                   {isFrench ? 'Annuler' : 'Cancel'}
                 </button>
-                <button type="submit" className="submit-review-action-btn">
-                  {isFrench ? 'Publier mon avis' : 'Submit Review'} ✓
+                <button type="submit" className="submit-review-action-btn" disabled={isSending}>
+                  {isSending ? tr('Envoi…', 'Sending…') : `${tr('Publier mon avis', 'Submit Review')} ✓`}
                 </button>
               </div>
             </form>
@@ -722,6 +888,34 @@ export default function ArtisanDashboard({
             </form>
           </div>
         </div>
+      )}
+
+      {showBooking && (
+        <BookingDialog
+          artisan={data}
+          defaultLocation={currentUser?.city || ''}
+          tr={tr}
+          onClose={() => setShowBooking(false)}
+          onBooked={() => {
+            setShowBooking(false);
+            triggerToast?.(tr('Suivez votre demande dans « Mes Réservations ».', 'Track your request in "My Orders".'), '📋');
+          }}
+          triggerToast={triggerToast}
+        />
+      )}
+
+      {showQuiz && (
+        <VerificationQuiz
+          artisan={{ professionalId: profileId }}
+          profession={data.profession}
+          lang={lang}
+          triggerToast={triggerToast}
+          isModal
+          onClose={() => {
+            setShowQuiz(false);
+            loadProfile();
+          }}
+        />
       )}
     </div>
   );

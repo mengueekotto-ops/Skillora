@@ -12,6 +12,7 @@ const verificationDocumentSchema = new mongoose.Schema(
       enum: [
         "ID_CARD",
         "PASSPORT",
+        "SELFIE",
         "CV",
         "CERTIFICATE",
         "PORTFOLIO",

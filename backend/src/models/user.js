@@ -20,7 +20,6 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-      index: true,
     },
 
     phone: {
@@ -29,9 +28,11 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Never returned by queries unless explicitly requested with .select("+password")
     password: {
       type: String,
       required: true,
+      select: false,
     },
 
     role: {
@@ -50,21 +51,57 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    latitude: {
+      type: Number,
+      default: null,
+    },
+
+    longitude: {
+      type: Number,
+      default: null,
+    },
+
     isActive: {
       type: Boolean,
       default: true,
+    },
+
+    // Stored as a SHA-256 hash; hidden from every query by default
+    resetPasswordToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    resetPasswordExpires: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    resetPasswordAttempts: {
+      type: Number,
+      default: 0,
+      select: false,
     },
   },
   {
     timestamps: true,
     collection: "users",
-    toJSON: { virtuals: true },
+    toJSON: {
+      virtuals: true,
+      transform: (doc, ret) => {
+        delete ret.password;
+        delete ret.resetPasswordToken;
+        delete ret.resetPasswordExpires;
+        delete ret.resetPasswordAttempts;
+        return ret;
+      },
+    },
     toObject: { virtuals: true },
   }
 );
 
-// Explicit unique index on email
-userSchema.index({ email: 1 }, { unique: true });
 
 // Virtual id field
 userSchema.virtual("id").get(function () {

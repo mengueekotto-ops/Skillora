@@ -373,6 +373,8 @@ const seedDatabase = async () => {
         password: hashedPassword,
         role: "ADMIN",
         location: "Yaoundé, Centre",
+        latitude: 3.888,
+        longitude: 11.517,
       });
     }
 
@@ -387,6 +389,8 @@ const seedDatabase = async () => {
         password: hashedPassword,
         role: "CUSTOMER",
         location: "Biyem-Assi, Yaoundé",
+        latitude: 3.834,
+        longitude: 11.488,
       });
     }
 
@@ -399,6 +403,9 @@ const seedDatabase = async () => {
         phone: "+237677112233",
         role: "PROFESSIONAL",
         location: "Bepanda, Douala",
+        latitude: 4.062,
+        longitude: 9.728,
+        serviceArea: "Douala & Bepanda (15 km radius)",
         profileImage: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80",
         profession: "Electrical Wiring & Fault Finding",
         bio: "Master electrician with 8+ years experience servicing panels, generator switches, and grounding in Douala.",
@@ -421,6 +428,9 @@ const seedDatabase = async () => {
         phone: "+237699445566",
         role: "PROFESSIONAL",
         location: "Biyem-Assi, Yaoundé",
+        latitude: 3.834,
+        longitude: 11.488,
+        serviceArea: "Yaoundé & Biyem-Assi (10 km radius)",
         profileImage: "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=800&q=80",
         profession: "Water Heater Installation",
         bio: "Plumbing specialist in water heater installation, leak patching & anti-damp wall treatment.",
@@ -443,6 +453,9 @@ const seedDatabase = async () => {
         phone: "+237677889900",
         role: "PROFESSIONAL",
         location: "Akwa, Douala",
+        latitude: 4.051,
+        longitude: 9.704,
+        serviceArea: "Douala & Akwa (20 km radius)",
         profileImage: "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80",
         profession: "Accountant",
         bio: "OHADA certified accountant providing bookkeeping, tax filing, CNPS payroll processing & invoicing.",
@@ -465,6 +478,9 @@ const seedDatabase = async () => {
         phone: "+237655112233",
         role: "PROFESSIONAL",
         location: "Bastos, Yaoundé",
+        latitude: 3.888,
+        longitude: 11.517,
+        serviceArea: "Yaoundé & Bastos (15 km radius)",
         profileImage: "https://images.unsplash.com/photo-1533750516457-a7f992034fec?auto=format&fit=crop&w=800&q=80",
         profession: "Ads Specialist",
         bio: "Digital media buyer running high ROI Facebook, Instagram & WhatsApp ad campaigns for local brands.",
@@ -487,6 +503,9 @@ const seedDatabase = async () => {
         phone: "+237699001122",
         role: "PROFESSIONAL",
         location: "Bonapriso, Douala",
+        latitude: 4.038,
+        longitude: 9.691,
+        serviceArea: "Douala & Bonapriso (10 km radius)",
         profileImage: "https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80",
         profession: "Actor / Actress",
         bio: "Bilingual actress and voiceover artist available for commercials, film, corporate hosting & events.",
@@ -515,8 +534,14 @@ const seedDatabase = async () => {
           password: hashedPassword,
           role: p.role,
           location: p.location,
+          latitude: p.latitude,
+          longitude: p.longitude,
           profileImage: p.profileImage,
         });
+      } else {
+        user.latitude = p.latitude;
+        user.longitude = p.longitude;
+        await user.save();
       }
 
       let profProfile = await Professional.findOne({ userId: user._id });
@@ -528,12 +553,21 @@ const seedDatabase = async () => {
           experience: p.experience,
           skills: p.skills,
           education: p.education,
+          latitude: p.latitude,
+          longitude: p.longitude,
+          serviceArea: p.serviceArea,
+          locationVisibility: "APPROXIMATE",
           verificationStatus: p.verificationStatus,
           verifiedBadge: p.verifiedBadge,
           verificationScore: p.verificationScore,
           rating: p.rating,
           completedMissions: p.completedMissions,
         });
+      } else {
+        profProfile.latitude = p.latitude;
+        profProfile.longitude = p.longitude;
+        profProfile.serviceArea = p.serviceArea;
+        await profProfile.save();
       }
 
       const categoryDoc = categories[p.catIndex] || categories[0];

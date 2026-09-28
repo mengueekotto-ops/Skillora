@@ -1,31 +1,31 @@
 const { Professional } = require("../models");
 
 /**
- * Updates professional verification status based on progressive milestones:
- * NEW -> VERIFIED -> TRUSTED -> EXPERT
+ * Updates an artisan's trust level from their track record:
+ * NEW -> ESTABLISHED -> TRUSTED -> EXPERT
+ *
+ * This is separate from verificationStatus/verifiedBadge, which only the
+ * verification quiz or an admin can change.
  */
 const updateVerificationProgression = async (professionalId) => {
   const prof = await Professional.findById(professionalId);
   if (!prof) return null;
 
-  let newStatus = prof.verificationStatus;
-
   const completed = prof.completedMissions || 0;
   const rating = prof.rating || 0;
-  const verScore = prof.verificationScore || 0;
+  const verified = Boolean(prof.verifiedBadge);
 
-  if (completed >= 20 && rating >= 4.7 && verScore >= 85) {
-    newStatus = "EXPERT";
-  } else if (completed >= 8 && rating >= 4.4 && verScore >= 75) {
-    newStatus = "TRUSTED";
-  } else if (completed >= 2 || verScore >= 70) {
-    newStatus = "VERIFIED";
-  } else {
-    newStatus = "NEW";
+  let trustLevel = "NEW";
+  if (verified && completed >= 20 && rating >= 4.7) {
+    trustLevel = "EXPERT";
+  } else if (verified && completed >= 8 && rating >= 4.4) {
+    trustLevel = "TRUSTED";
+  } else if (completed >= 2) {
+    trustLevel = "ESTABLISHED";
   }
 
-  if (newStatus !== prof.verificationStatus) {
-    prof.verificationStatus = newStatus;
+  if (trustLevel !== prof.trustLevel) {
+    prof.trustLevel = trustLevel;
     await prof.save();
   }
 

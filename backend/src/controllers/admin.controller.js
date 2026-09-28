@@ -1,5 +1,5 @@
 const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+const { signToken } = require("../utils/jwt.util");
 const {
   User,
   Professional,
@@ -26,7 +26,7 @@ const adminLogin = async (req, res, next) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const user = await User.findOne({ email: normalizedEmail });
+    const user = await User.findOne({ email: normalizedEmail }).select("+password");
 
     if (!user || user.role !== "ADMIN") {
       return res.status(401).json({
@@ -50,16 +50,12 @@ const adminLogin = async (req, res, next) => {
       });
     }
 
-    const token = jwt.sign(
-      {
-        id: user._id.toString(),
-        email: user.email,
-        role: "ADMIN",
-        adminRole: "SUPER_ADMIN",
-      },
-      process.env.JWT_SECRET || "default_jwt_secret",
-      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
-    );
+    const token = signToken({
+      id: user._id.toString(),
+      email: user.email,
+      role: "ADMIN",
+      adminRole: "SUPER_ADMIN",
+    });
 
     return res.json({
       success: true,
@@ -410,16 +406,61 @@ const getVerificationRequests = async (req, res, next) => {
       query.status = status;
     }
 
-    const requests = await Verification.find(query)
+    const rawRequests = await Verification.find(query)
       .populate({
         path: "artisanId",
         populate: { path: "userId", select: "firstName lastName email phone location profileImage isActive" },
       })
       .sort({ createdAt: -1 });
 
+    const requestsWithFullAudit = await Promise.all(
+      rawRequests.map(async (vReq) => {
+        const vObj = vReq.toObject();
+        const artisanId = vReq.artisanId ? vReq.artisanId._id : null;
+
+        // 1. Fetch Verification Documents (ID Card, Diploma, Video, Business Reg, etc.)
+        let documents = [];
+        if (artisanId) {
+          documents = await VerificationDocument.find({
+            $or: [{ verificationId: vReq._id }, { artisanId: artisanId }],
+          }).sort({ createdAt: -1 });
+        }
+
+        // 2. Locate Video Recording (from Professional profile or video document)
+        let videoUrl = vReq.artisanId ? vReq.artisanId.videoUrl : null;
+        if (!videoUrl) {
+          const videoDoc = documents.find((d) => d.documentType === "VIDEO");
+          if (videoDoc) videoUrl = videoDoc.fileUrl;
+        }
+
+        // 3. Fetch MCQ Technical Assessment Answers & Questions
+        let mcqAnswers = [];
+        if (artisanId) {
+          mcqAnswers = await VerificationAnswer.find({ artisanId })
+            .populate("questionId")
+            .sort({ createdAt: -1 });
+        }
+
+        // 4. Calculate MCQ Score
+        let mcqScore = vReq.technicalAssessmentScore || 0;
+        if (mcqAnswers.length > 0) {
+          const totalAiScore = mcqAnswers.reduce((sum, a) => sum + (a.aiScore || 0), 0);
+          mcqScore = Math.round(totalAiScore / mcqAnswers.length);
+        }
+
+        return {
+          ...vObj,
+          documents,
+          videoUrl: videoUrl || "https://assets.mixkit.co/videos/preview/mixkit-man-working-on-his-laptop-308-large.mp4", // Fallback video stream for preview
+          mcqAnswers,
+          mcqScore,
+        };
+      })
+    );
+
     return res.json({
       success: true,
-      data: requests,
+      data: requestsWithFullAudit,
     });
   } catch (error) {
     next(error);

@@ -1,148 +1,190 @@
-<<<<<<< HEAD
-# AI-Based Platform Connecting Customers and Artisans
-
-> An intelligent, secure, and user-friendly service marketplace that connects customers with verified artisans and skilled professionals using Artificial Intelligence.
-
----
-
-## 📋 Table of Contents
-
-- [Project Overview](#-project-overview)
-- [Objectives & Vision](#-objectives--vision)
-- [Main Users](#-main-users)
-- [User Journeys](#-user-journeys)
-- [Artificial Intelligence Features](#-artificial-intelligence-features)
-- [Main Modules](#-main-modules)
-- [Technology Stack](#-technology-stack)
-- [Expected Outcome](#-expected-outcome)
-
----
-
-## 📌 Project Overview
-
-This project is an **AI-powered service marketplace** designed to connect customers with verified artisans and skilled professionals via a secure, intelligent web and mobile application. Unlike traditional directories or classified ads websites, the platform analyzes customer service requests using Artificial Intelligence to recommend the most suitable professionals based on location, skills, ratings, availability, budget, and work history.
-
-### Supported Professions & Services
-The platform supports a broad spectrum of skilled workers, technicians, and freelancers, including:
-- **Trades & Crafts**: Plumbers, Electricians, Carpenters, Painters, Welders, Mechanics, Tailors
-- **Home & Appliance Repair**: AC Technicians, Home Appliance Technicians, Computer & Mobile Phone Repair Technicians
-- **Personal & Domestic Care**: Hairdressers, Beauticians, House Cleaners, Babysitters, Gardeners, Tutors
-- **Creative & Technical Services**: Photographers, Graphic Designers, Software Developers, Network Engineers, Interior Designers, Event Decorators, Security Guards, and other skilled professionals.
-
----
-
-## 🎯 Objectives & Vision
-
-- **Intelligent Matching**: Eliminate manual searching across hundreds of profiles by utilizing AI algorithms to match requirements with provider capabilities.
-- **Verification & Trust**: Build a trusted ecosystem through official identity document verification and authentic community reviews.
-- **Economic Empowerment**: Provide skilled workers and freelancers with increased visibility, client management tools, and employment opportunities.
-- **Seamless Experience**: Offer end-to-end service booking, secure messaging, real-time tracking, and hassle-free payment management.
-
----
-
-## 👥 Main Users
-
-### 1. Customer
-A customer is anyone seeking professional services.
-- **Features**: Account creation, natural language search, category browsing, multi-criteria filtering (location, price, rating, experience, availability, verification status), viewing portfolios (photos/videos), reading reviews, receiving AI recommendations, direct chat, secure booking & payments, live status tracking, rating & reviewing completed jobs, reporting fraud.
-
-### 2. Artisan (Professional)
-A verified skilled professional providing services.
-- **Features**: Registration, identity verification (official document upload), professional profile management, service catalog setup & pricing, availability scheduling, portfolio showcase, receiving/accepting/rejecting booking requests, real-time client chat, work progress updates, job completion confirmation, earnings dashboard, receiving AI profile optimization tips.
-
-### 3. Administrator
-The platform manager overseeing system health and operations.
-- **Features**: User management, artisan identity & document verification (approve/reject), removing fake accounts, managing service categories, review moderation, complaint handling, AI recommendation model configuration, analytics & reporting, payment records monitoring, platform announcements.
-
----
-
-## 🗺️ User Journeys
-
-### Customer Journey
-```mermaid
-graph TD
-    A[Install App & Register/Login] --> B[Search Service / Use Filters]
-    B --> C[Receive AI Recommendations]
-    C --> D[Compare & Select Artisan]
-    D --> E[Book Service & Chat]
-    E --> F[Secure Payment]
-    F --> G[Track Job Status]
-    G --> H[Confirm Completion & Leave Review]
-```
-
-### Artisan Journey
-```mermaid
-graph TD
-    A[Register & Upload Identity Docs] --> B[Wait for Admin Verification]
-    B --> C[Build Profile & Portfolio]
-    C --> D[Set Pricing & Availability]
-    D --> E[Receive & Accept Booking Requests]
-    E --> F[Perform & Complete Job]
-    F --> G[Receive Payment & Rating]
-```
-
----
-
-## 🤖 Artificial Intelligence Features
-
-Artificial Intelligence serves as the primary engine for platform efficiency and security:
-
-1. **Smart Recommendation System**: Ranks and suggests artisans by computing relevance scores based on customer location, service category, provider rating, completed job history, response speed, schedule availability, years of experience, and verification status.
-2. **Intelligent Search (NLP)**: Processes natural language queries (e.g., *"I need someone to repair my leaking sink"*) and maps them accurately to appropriate service categories and providers.
-3. **AI Chat Assistant**: An interactive helper for finding services, guiding booking flows, answering FAQs, and assisting with preliminary troubleshooting.
-4. **Fraud Detection**: Continuously scans platform activity to detect duplicate accounts, fake reviews, spam messages, abnormal booking behaviors, suspicious transactions, and plagiarized portfolio media.
-5. **Personalized Home Page**: Adapts each customer's interface according to booking history, preferred service categories, location, budget constraints, and frequent searches.
-6. **AI Profile Improvement**: Evaluates artisan profile completeness and offers automated suggestions (e.g., uploading more portfolio pictures, improving response times, adjusting service descriptions).
-
----
-
-## 🧩 Main Modules
-
-| Module | Key Functions |
-| :--- | :--- |
-| **Authentication** | Registration, Login, Password Reset, Email Verification, JWT Role Management (Customer, Artisan, Admin) |
-| **Profile** | User details, contact info, skills, experience, portfolio gallery, ratings, verification badges |
-| **Service Management** | Add/edit/remove services, pricing configurations, working location radiuses, schedule management |
-| **Booking** | Service request creation, cancellation, status tracking (`Pending`, `Accepted`, `Rejected`, `In Progress`, `Completed`, `Cancelled`) |
-| **Messaging** | Real-time chat powered by Socket.IO with text and image attachment support |
-| **Payment** | Secure online transactions, invoice records, payout tracking for artisans |
-| **Review** | Post-job ratings and written feedback feeding directly into AI recommendation weights |
-| **Notification** | Push notifications for bookings, messages, payments, verification updates, and promotions |
-| **Administration** | Admin dashboard for user oversight, document verification queues, complaints, AI settings, and platform analytics |
-
----
-
-## 🛠️ Technology Stack
-
-```
-                     ┌────────────────────────────────┐
-                     │     Flutter Mobile App UI      │
-                     └───────────────┬────────────────┘
-                                     │ REST API / Socket.IO
-                     ┌───────────────▼────────────────┐
-                     │       Express.js Backend       │
-                     └───────┬────────────────┬───────┘
-                             │                │
-             ┌───────────────▼──────┐  ┌──────▼─────────────────────┐
-             │ Sequelize ORM + PG   │  │ Python AI Microservices    │
-             │     (Database)       │  │ (Recommendations & NLP)   │
-             └──────────────────────┘  └────────────────────────────┘
-```
-
-- **Frontend**: Flutter (Cross-platform Mobile UI)
-- **Backend API**: Express.js (Node.js framework)
-- **Database & ORM**: PostgreSQL with Sequelize ORM
-- **Real-Time Communication**: Socket.IO
-- **Authentication**: JSON Web Tokens (JWT) & bcrypt encryption
-- **AI Microservices**: Python-based Machine Learning models integrated via HTTP/gRPC APIs
-- **Storage**: Cloudinary (Media assets & document uploads)
-- **Push Notifications**: Firebase Cloud Messaging (FCM)
-
----
-
-## 🏆 Expected Outcome
-
-A robust, scalable, and secure AI-driven platform that streamlines how customers discover, evaluate, and hire trustworthy artisans, while empowering skilled professionals with tools to manage and scale their services efficiently.
-=======
 # Skillora
->>>>>>> b488c75b00df24062759f8f036fda3b567376cfe
+
+> A marketplace that connects customers in Cameroon with skilled artisans: plumbers, electricians, carpenters, technicians and more. Artisans can earn a **Verified Badge** by passing an AI-generated trade quiz, and customers pay through **Mobile Money into escrow**, released only when they confirm the job is done.
+
+---
+
+## Contents
+
+- [Features](#features)
+- [How a job works](#how-a-job-works)
+- [Technology stack](#technology-stack)
+- [Project structure](#project-structure)
+- [Getting started](#getting-started)
+- [Configuration](#configuration)
+- [Testing](#testing)
+- [Security model](#security-model)
+- [Roadmap](#roadmap)
+
+---
+
+## Features
+
+### Customers
+- Browse and search artisans by trade, city or skill; filter by verified, solo or workshop
+- Send a booking request with a description, address and preferred date
+- Pay by MTN MoMo / Orange Money into **escrow**; the money is released to the artisan only after the customer confirms the work is done
+- Track each job (Requested → Accepted → Paid → In progress → Completed), download a receipt
+- Leave a review, only after a completed job and once per job
+- Save favourite artisans; receive in-app notifications
+
+### Artisans (solo or workshop)
+- Sign up in 4 steps: account → trade & presentation video → 10-question AI quiz → ID / selfie / certificate
+- Or skip verification and start working immediately without the badge
+- Accept or decline requests, start jobs, and get paid automatically on the customer's confirmation (minus a 2% platform fee)
+- Manage cover photo, portfolio, bio, service area and location privacy (exact / approximate / city only)
+
+### Administrators
+- Admin console: statistics, users, artisans, verification queue, services, requests, reviews, categories, broadcast notifications
+- Admin accounts cannot be created through public sign-up (see [Creating an admin](#creating-an-admin))
+
+### AI
+- Trade quiz generation (with offline question banks when the AI is unavailable)
+- Written-answer evaluation, document consistency analysis, search-intent extraction
+- Chat assistant and recommendation scoring (relevance, distance, rating, verification, experience, availability)
+
+---
+
+## How a job works
+
+```mermaid
+sequenceDiagram
+    participant C as Customer
+    participant API as Skillora API
+    participant A as Artisan
+    participant D as DigiPay
+    C->>API: Book artisan (PENDING)
+    A->>API: Accept (ACCEPTED)
+    C->>API: Pay amount
+    API->>D: Mobile Money request to customer's phone
+    C->>API: Confirm after approving on phone
+    API->>D: Check transaction → paid
+    Note over API: Payment HELD in escrow
+    A->>API: Start work (IN_PROGRESS)
+    C->>API: Confirm job done (COMPLETED)
+    API->>D: Payout 98% to artisan, 2% to platform
+```
+
+If a paid job is cancelled or rejected, the payment is flagged `REFUND_PENDING` for an administrator.
+
+---
+
+## Technology stack
+
+| Layer | Technology |
+| :--- | :--- |
+| Web app | React 19, Vite, Tailwind CSS (`frontend/Marketplace`) |
+| API | Node.js, Express 5 (`backend`) |
+| Database | MongoDB with Mongoose |
+| Auth | JWT + bcrypt |
+| Payments | DigiPay SDK (MTN MoMo / Orange Money) |
+| AI | OpenRouter API (optional; offline fallbacks built in) |
+| File storage | Local `backend/uploads` folder |
+
+`frontend/agrimed_link` is a separate Flutter prototype and is not connected to this API.
+
+---
+
+## Project structure
+
+```
+backend/
+  src/
+    config/        MongoDB connection
+    controllers/   Route handlers (auth, professionals, requests, payments, verifications, admin, ...)
+    middleware/    Auth, admin auth, roles, uploads, error handler
+    models/        Mongoose schemas
+    routes/        Express routers mounted under /api
+    services/      AI, DigiPay, escrow payouts, recommendations, trust levels
+    utils/         JWT, ownership checks, distance
+    scripts/       createNewAdmin.js, seedAdmin.js
+    seeders/       Demo data
+  tests/           End-to-end API tests
+frontend/Marketplace/
+  src/api.js       Shared API client + data mappers
+  src/components/  Screens and dialogs
+```
+
+---
+
+## Getting started
+
+Requirements: Node.js 20+, MongoDB 6+.
+
+```bash
+# 1. API
+cd backend
+npm install
+cp .env.example .env        # then fill in JWT_SECRET (required) and the other values
+npm run dev                 # http://localhost:5000
+
+# 2. Web app (second terminal)
+cd frontend/Marketplace
+npm install
+npm run dev                 # http://localhost:5173 (proxies /api to :5000)
+```
+
+Optional demo data: `cd backend && npm run seed`.
+
+### Creating an admin
+
+```bash
+cd backend
+node src/scripts/createNewAdmin.js
+```
+
+Change the default password immediately after the first login.
+
+---
+
+## Configuration
+
+All settings live in `backend/.env` (see `backend/.env.example`):
+
+| Variable | Required | Purpose |
+| :--- | :---: | :--- |
+| `JWT_SECRET` | ✅ | Signs login tokens. The server refuses to start without it. |
+| `MONGO_URI` | ✅ | MongoDB connection string |
+| `CORS_ORIGINS` | | Allowed web origins (default `http://localhost:5173`) |
+| `OPENROUTER_API_KEY` | | Enables live AI; otherwise offline fallbacks are used |
+| `DIGIPAY_API_KEY` | for payments | DigiPay API key (`dpk_...`) |
+| `DIGIPAY_ENV` | | `production` or `sandbox` |
+| `DIGIPAY_MOCK` | | `true` = fake payments for local development (refused in production) |
+| `PLATFORM_ORANGE_NUMBER` | | Receives the platform commission payout |
+| `PLATFORM_FEE_PERCENT` | | Platform fee, default `2` |
+
+Never commit `.env` files or API keys. Keys belong only in the backend `.env`; the web app never needs one.
+
+---
+
+## Testing
+
+The end-to-end suite checks the security rules and the full booking → escrow → payout → review flow. **Run it against a test database**, because it creates accounts:
+
+```bash
+cd backend
+MONGO_URI=mongodb://127.0.0.1:27017/skillora_test DIGIPAY_MOCK=true npm start
+# in another terminal
+npm run test:e2e
+```
+
+---
+
+## Security model
+
+- Public sign-up can only create `CUSTOMER` or `PROFESSIONAL` accounts.
+- Passwords and reset codes are never returned by the API. Reset codes are hashed, expire after 15 minutes and allow 5 attempts. *Delivery by email/SMS still has to be connected; in development the code is printed in the server console.*
+- Every write route checks ownership: users can only act on their own profile, requests, payments, verifications and reviews; admins can act on everything.
+- The quiz answers are stored server-side; the browser never receives them.
+- Uploads require login, accept images (JPEG/PNG/WEBP/GIF) and videos (WEBM/MP4/MOV) only, and are served with `nosniff` and a restrictive CSP.
+- Payments move `PENDING → HELD → PROCESSING → SUCCESS` with atomic transitions, so a payment can never be released twice.
+
+---
+
+## Roadmap
+
+- Email/SMS delivery of password-reset codes
+- DigiPay webhooks (automatic payment confirmation instead of the "I approved" button)
+- Real-time chat (Socket.IO) and push notifications
+- Cloud storage for uploads (e.g. Cloudinary / S3)
+- URL routing in the web app

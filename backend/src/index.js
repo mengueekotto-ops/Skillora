@@ -21,15 +21,37 @@ const aiRoutes = require("./routes/ai.route");
 const verificationRoutes = require("./routes/verification.route");
 const bookmarkRoutes = require("./routes/bookmark.route");
 const uploadRoutes = require("./routes/upload.route");
+const paymentRoutes = require("./routes/payment.route");
 
 const errorHandler = require("./middleware/error.middleware");
 
+const { getJwtSecret } = require("./utils/jwt.util");
+
+// Fail fast: never run without a signing secret
+getJwtSecret();
+
 const app = express();
 
+// Only these front-end origins may call the API from a browser (comma-separated in CORS_ORIGINS)
+const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 // Global Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.disable("x-powered-by");
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow same-origin / server-to-server tools (no Origin header) and listed front-ends
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(null, false);
+    },
+  })
+);
+// 15mb allows base64-encoded images up to the 10MB upload limit
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 // Fallback body middleware
 app.use((req, res, next) => {
@@ -42,7 +64,7 @@ app.get("/api/health", (req, res) => {
   return res.json({
     success: true,
     message: "Skillora API is running",
-    geminiConfigured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "YOUR_GEMINI_API_KEY"),
+    aiConfigured: Boolean(process.env.OPENROUTER_API_KEY),
     timestamp: new Date().toISOString(),
   });
 });
@@ -56,7 +78,16 @@ app.get("/", (req, res) => {
 });
 
 // Serve Uploads directory statically
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+app.use(
+  "/uploads",
+  express.static(path.join(__dirname, "../uploads"), {
+    setHeaders: (res) => {
+      // Uploaded files are data, never executable pages
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self'; media-src 'self'");
+    },
+  })
+);
 
 // Mount Routes
 app.use("/api/auth", authRoutes);
@@ -72,6 +103,7 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/verifications", verificationRoutes);
 app.use("/api/bookmarks", bookmarkRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/api/payments", paymentRoutes);
 
 // Error Middleware
 app.use(errorHandler);

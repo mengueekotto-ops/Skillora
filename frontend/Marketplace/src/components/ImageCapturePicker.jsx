@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { api } from '../api';
 
 /**
  * ImageCapturePicker Component
@@ -11,7 +12,8 @@ export default function ImageCapturePicker({
   onUploadSuccess,
   label = 'Photo',
   aspectRatio = 'square', // 'square' | 'banner' | 'free'
-  uploadUrl = 'http://localhost:5000/api/upload/image',
+  // API path under /api: '/upload/image' (generic), '/upload/profile-image', '/upload/artisan-cover'
+  uploadPath = '/upload/image',
   maxSizeMB = 10,
   lang = 'fr',
   triggerToast = () => {},
@@ -192,41 +194,21 @@ export default function ImageCapturePicker({
 
     setIsUploading(true);
     try {
-      let finalUrl = previewUrl;
+      // Upload to the backend; only a server URL is ever handed back to the caller
+      const result = await api(uploadPath, { method: 'POST', body: { image: previewUrl } });
+      const finalUrl = result.data?.coverPhoto || result.data?.profileImage || result.data?.url;
+      if (!finalUrl) throw new Error(isFrench ? "Réponse du serveur invalide" : 'Invalid server response');
 
-      // Try uploading to backend API
-      const response = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          image: previewUrl,
-        }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.data && result.data.url) {
-          finalUrl = result.data.url;
-        }
-        triggerToast(isFrench ? "Photo enregistrée avec succès !" : "Photo saved successfully!", '✓');
-      } else {
-        // Fallback: use dataUrl locally if backend is unavailable
-        triggerToast(isFrench ? "Image appliquée localement" : "Image applied locally", '✓');
-      }
-
+      triggerToast(isFrench ? "Photo enregistrée avec succès !" : "Photo saved successfully!", '✓');
       if (onChange) onChange(finalUrl);
       if (onUploadSuccess) onUploadSuccess(finalUrl);
       setIsOpen(false);
       stopCameraStream();
     } catch (err) {
-      console.warn("Upload API error, using local preview:", err);
-      // Graceful fallback to client-side data url
-      if (onChange) onChange(previewUrl);
-      if (onUploadSuccess) onUploadSuccess(previewUrl);
-      triggerToast(isFrench ? "Image enregistrée !" : "Image saved!", '✓');
-      setIsOpen(false);
+      triggerToast(
+        (isFrench ? "Échec de l'envoi de la photo : " : 'Photo upload failed: ') + err.message,
+        '⚠️'
+      );
     } finally {
       setIsUploading(false);
     }

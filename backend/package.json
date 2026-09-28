@@ -1,22 +1,23 @@
 {
-  "name": "interlink-backend",
+  "name": "skillora-backend",
   "version": "1.0.0",
-  "description": "INTERLINK backend API",
+  "description": "Skillora API — artisan marketplace for Cameroon",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "seed": "node src/seeders/seed.js"
+    "seed": "node src/seeders/seed.js",
+    "test:e2e": "node tests/e2e.test.mjs",
+    "test:geo": "node tests/verify-geolocation.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
+    "digipay-sdk": "^1.0.0",
     "dotenv": "^16.6.1",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.10.0",
-    "mysql2": "^3.12.0",
-    "sequelize": "^6.37.8"
+    "mongoose": "^9.10.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

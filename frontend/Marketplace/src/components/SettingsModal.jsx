@@ -1,5 +1,26 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ImageCapturePicker from './ImageCapturePicker';
+import { api } from '../api';
+
+const formFromUser = (user) => {
+  const prof = user?.professionalProfile || {};
+  return {
+    name: user?.name || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
+    role: user?.role || '',
+    artisanType: prof.artisanType === 'GROUPED' ? 'Grouped Artisan (Workshop)' : prof.artisanType ? 'Single Artisan' : '',
+    city: user?.city || '',
+    bio: prof.bio || '',
+    profession: prof.profession || '',
+    experience: prof.experience ?? '',
+    profileImage: user?.profileImage || '',
+    latitude: prof.latitude ?? null,
+    longitude: prof.longitude ?? null,
+    serviceArea: prof.serviceArea || '',
+    locationVisibility: prof.locationVisibility || 'APPROXIMATE',
+  };
+};
 
 export default function SettingsModal({
   isOpen,
@@ -11,37 +32,104 @@ export default function SettingsModal({
   triggerToast
 }) {
   const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'edit' | 'legal'
-  const [formData, setFormData] = useState({
-    name: currentUser?.name || 'Emmanuel Ngu',
-    email: currentUser?.email || 'emmanuel.pro@skillora.cm',
-    phone: currentUser?.phone || '+237 675 42 10 99',
-    role: currentUser?.role || 'PROFESSIONAL',
-    artisanType: currentUser?.artisanType || 'Grouped Artisan (Master Workshop)',
-    city: currentUser?.city || 'Yaoundé (Bastos)',
-    bio: currentUser?.bio || 'Certified Master Artisan with 8+ years specializing in electrical engineering, high-voltage panels and solar inverter installations in Cameroon.',
-    profileImage: currentUser?.profileImage || currentUser?.avatar || ''
-  });
+  const [formData, setFormData] = useState(() => formFromUser(currentUser));
+  const [isSaving, setIsSaving] = useState(false);
+  const isArtisan = currentUser?.role === 'PROFESSIONAL';
 
-  if (!isOpen) return null;
+  // Reload the form from the real account each time the modal opens
+  useEffect(() => {
+    if (isOpen) setFormData(formFromUser(currentUser));
+  }, [isOpen, currentUser]);
 
-  const handleSaveProfile = (e) => {
-    e.preventDefault();
-    setCurrentUser({
-      ...currentUser,
-      ...formData
-    });
-    triggerToast(t.editSuccess, '✓');
-    setActiveTab('profile');
+  if (!isOpen || !currentUser) return null;
+
+  const handleDetectDeviceLocation = () => {
+    if (!navigator.geolocation) {
+      triggerToast('Geolocation not supported by your browser', '⚠️');
+      return;
+    }
+    triggerToast('Detecting device location...', '📍');
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = Math.round(pos.coords.latitude * 10000) / 10000;
+        const lon = Math.round(pos.coords.longitude * 10000) / 10000;
+        setFormData((prev) => ({ ...prev, latitude: lat, longitude: lon }));
+        try {
+          if (isArtisan) {
+            await api('/professionals/location', {
+              method: 'PUT',
+              body: { latitude: lat, longitude: lon, serviceArea: formData.serviceArea, locationVisibility: formData.locationVisibility },
+            });
+          } else {
+            await api('/users/location', { method: 'PUT', body: { latitude: lat, longitude: lon } });
+          }
+          triggerToast(`Location saved: Lat ${lat}°, Lon ${lon}°`, '🟢');
+        } catch (err) {
+          triggerToast(err.message, '⚠️');
+        }
+      },
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) {
+          triggerToast('Location permission denied.', '⚠️');
+        } else {
+          triggerToast('Could not retrieve location.', '❌');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    const [firstName, ...rest] = formData.name.trim().split(/\s+/);
+    setIsSaving(true);
+    try {
+      const userRes = await api(`/users/${currentUser.id}`, {
+        method: 'PUT',
+        body: { firstName, lastName: rest.join(' ') || currentUser.lastName, phone: formData.phone, location: formData.city },
+      });
+
+      let professionalProfile = currentUser.professionalProfile;
+      if (isArtisan && currentUser.professionalId) {
+        const profRes = await api(`/professionals/${currentUser.professionalId}`, {
+          method: 'PUT',
+          body: {
+            profession: formData.profession.trim() || undefined,
+            experience: formData.experience === '' ? undefined : Number(formData.experience),
+            bio: formData.bio,
+            serviceArea: formData.serviceArea,
+            locationVisibility: formData.locationVisibility,
+            latitude: formData.latitude,
+            longitude: formData.longitude,
+          },
+        });
+        professionalProfile = profRes.data;
+      }
+
+      const u = userRes.data;
+      setCurrentUser({
+        ...currentUser,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        name: `${u.firstName} ${u.lastName}`.trim(),
+        phone: u.phone || '',
+        city: u.location || '',
+        location: u.location || '',
+        professionalProfile,
+      });
+      triggerToast(t.editSuccess, '✓');
+      setActiveTab('profile');
+    } catch (err) {
+      triggerToast(err.message, '⚠️');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // The picker uploads to /upload/profile-image, which already saves it on the account
   const handleAvatarChange = (newUrl) => {
     setFormData((prev) => ({ ...prev, profileImage: newUrl }));
-    setCurrentUser({
-      ...currentUser,
-      ...formData,
-      profileImage: newUrl,
-      avatar: newUrl
-    });
+    setCurrentUser({ ...currentUser, profileImage: newUrl || null });
   };
 
   return (
@@ -103,6 +191,7 @@ export default function SettingsModal({
                   <ImageCapturePicker
                     value={formData.profileImage}
                     onChange={handleAvatarChange}
+                    uploadPath="/upload/profile-image"
                     triggerToast={triggerToast}
                     label="Photo de profil"
                     aspectRatio="square"
@@ -171,6 +260,7 @@ export default function SettingsModal({
                   <ImageCapturePicker
                     value={formData.profileImage}
                     onChange={handleAvatarChange}
+                    uploadPath="/upload/profile-image"
                     triggerToast={triggerToast}
                     label="Photo de profil"
                     aspectRatio="square"
@@ -196,7 +286,8 @@ export default function SettingsModal({
                   <input
                     type="email"
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    readOnly
+                    title="Email cannot be changed"
                     className="luxury-input-full"
                     required
                   />
@@ -224,6 +315,32 @@ export default function SettingsModal({
                 />
               </div>
 
+              {isArtisan && (<>
+              <div className="form-field-group" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label className="field-label">Métier / Trade</label>
+                  <input
+                    type="text"
+                    value={formData.profession}
+                    onChange={(e) => setFormData({ ...formData, profession: e.target.value })}
+                    className="luxury-input-full"
+                    placeholder="Électricien, Plombier, Menuisier…"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Expérience (ans)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    value={formData.experience}
+                    onChange={(e) => setFormData({ ...formData, experience: e.target.value })}
+                    className="luxury-input-full"
+                  />
+                </div>
+              </div>
+
               <div className="form-field-group">
                 <label className="field-label">Bio & Specializations</label>
                 <textarea
@@ -234,12 +351,79 @@ export default function SettingsModal({
                 ></textarea>
               </div>
 
+              {/* Geolocation & Service Area Configuration */}
+              <div className="form-field-group" style={{ background: 'rgba(0, 240, 255, 0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(0, 240, 255, 0.2)', marginTop: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <label className="field-label" style={{ color: 'var(--primary)', margin: 0 }}>📍 Geolocation & Service Area Settings</label>
+                  <button
+                    type="button"
+                    className="btn-outline-gold"
+                    onClick={handleDetectDeviceLocation}
+                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                  >
+                    📍 Use Device Location
+                  </button>
+                </div>
+
+                <div className="form-two-col">
+                  <div className="form-field-group">
+                    <label className="field-label" style={{ fontSize: '0.8rem' }}>Latitude (°N)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={formData.latitude ?? ''}
+                      onChange={(e) => setFormData({ ...formData, latitude: e.target.value ? Number(e.target.value) : null })}
+                      className="luxury-input-full"
+                      placeholder="e.g. 3.8883"
+                    />
+                  </div>
+                  <div className="form-field-group">
+                    <label className="field-label" style={{ fontSize: '0.8rem' }}>Longitude (°E)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={formData.longitude ?? ''}
+                      onChange={(e) => setFormData({ ...formData, longitude: e.target.value ? Number(e.target.value) : null })}
+                      className="luxury-input-full"
+                      placeholder="e.g. 11.5175"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-two-col">
+                  <div className="form-field-group">
+                    <label className="field-label" style={{ fontSize: '0.8rem' }}>Service Area / Operational Radius</label>
+                    <input
+                      type="text"
+                      value={formData.serviceArea || ''}
+                      onChange={(e) => setFormData({ ...formData, serviceArea: e.target.value })}
+                      className="luxury-input-full"
+                      placeholder="e.g. Yaoundé & Bastos (15 km radius)"
+                    />
+                  </div>
+                  <div className="form-field-group">
+                    <label className="field-label" style={{ fontSize: '0.8rem' }}>Location Privacy Setting</label>
+                    <select
+                      value={formData.locationVisibility}
+                      onChange={(e) => setFormData({ ...formData, locationVisibility: e.target.value })}
+                      className="luxury-input-full"
+                      style={{ background: 'var(--bg-dark)', color: 'var(--text-light)' }}
+                    >
+                      <option value="APPROXIMATE">Approximate (Shows distance like "2.4 km away")</option>
+                      <option value="CITY_ONLY">City Only (Shows city, hides coordinates)</option>
+                      <option value="EXACT">Exact Location</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              </>)}
+
               <div className="settings-actions-footer">
                 <button type="button" className="btn-secondary" onClick={() => setActiveTab('profile')}>
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary-gold">
-                  Save Changes ✓
+                <button type="submit" className="btn-primary-gold" disabled={isSaving}>
+                  {isSaving ? 'Saving…' : 'Save Changes ✓'}
                 </button>
               </div>
             </form>

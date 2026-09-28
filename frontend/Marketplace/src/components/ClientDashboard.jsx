@@ -1,9 +1,21 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  api,
+  avatarFor,
+  formatDate,
+  formatFCFA,
+  mapProfessional,
+  mapRequest,
+  PAYMENT_STATUS_LABELS,
+  shortRef,
+} from '../api';
+import { BookingDialog, PaymentDialog, ReviewDialog } from './JobDialogs';
+
+const ACTIVE_STATUSES = ['PENDING', 'ACCEPTED', 'IN_PROGRESS'];
 
 export default function ClientDashboard({
   currentUser,
-  walletBalance,
-  onOpenWallet,
+  setCurrentUser,
   onOpenSettings,
   triggerToast,
   t,
@@ -11,407 +23,334 @@ export default function ClientDashboard({
   onSelectArtisan
 }) {
   const isFrench = lang === 'fr';
+  const tr = (fr, en) => (isFrench ? fr : en);
 
-  // Navigation tab: 'OVERVIEW' | 'ORDERS' | 'MESSAGES' | 'BOOKMARKS' | 'PAYMENTS' | 'SETTINGS'
+  // Navigation tab: 'OVERVIEW' | 'ORDERS' | 'BOOKMARKS' | 'PAYMENTS' | 'SETTINGS'
   const [activeTab, setActiveTab] = useState('OVERVIEW');
-
-  // Subtab for Orders: 'ACTIVE' | 'HISTORY'
   const [ordersSubTab, setOrdersSubTab] = useState('ACTIVE');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('ALL');
 
-  // Initial Bookmarks State
-  const [bookmarks, setBookmarks] = useState([
-    {
-      id: 1,
-      name: 'Emmanuel Ngu',
-      businessName: 'Ngu Solar & Power Systems',
-      profession: 'Électricien Master & Solaire',
-      city: 'Douala & Yaoundé',
-      location: 'Akwa, Douala • Bastos, Yaoundé',
-      rating: 4.9,
-      reviews: 38,
-      verified: true,
-      priceRate: '15 000 FCFA',
-      phone: '+237 675 42 10 99',
-      whatsapp: '237675421099',
-      image: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80',
-      coverPhoto: 'https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=1600&q=85',
-      experience: '08 ans',
-      badge: 'PRO MASTER',
-      type: 'Single Artisan (Master Specialist)',
-      skills: ['Tableaux Électriques', 'Centrales Solaires', 'Raccordement Groupes', 'Dépannage Court-circuit', 'Éclairage LED Industriel'],
-      bio: 'Électricien diplômé avec 8 ans d\'expérience dans le résidentiel et l\'énergie solaire au Cameroun.',
-      gallery: [
-        { id: 101, title: 'Centrale Solaire Résidentielle 5kVA', img: 'https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=800&q=80' },
-        { id: 102, title: 'Câblage Armoire Électrique Triphasée', img: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80' },
-        { id: 103, title: 'Installation Onduleur Hybride', img: 'https://images.unsplash.com/photo-1544725176-7c40e5a71c5e?auto=format&fit=crop&w=800&q=80' }
-      ]
-    },
-    {
-      id: 2,
-      name: 'Atelier Central Tuyauterie & Bâtiment',
-      businessName: 'Atelier Central Tuyauterie SARL',
-      profession: 'Plomberie Sanitaire & Urgence',
-      city: 'Yaoundé (Bastos)',
-      location: 'Bastos & Biyem-Assi, Yaoundé',
-      rating: 5.0,
-      reviews: 94,
-      verified: true,
-      priceRate: '25 000 FCFA',
-      phone: '+237 699 88 77 66',
-      whatsapp: '237699887766',
-      image: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=600&q=80',
-      coverPhoto: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=1600&q=85',
-      experience: '12 ans',
-      badge: 'ENTERPRISE CERTIFIED',
-      type: 'Grouped Artisan (Workshop)',
-      skills: ['Tuyauterie Cuivre & Inox', 'Chauffe-eau Solaire', 'Dépannage Fuite 24/7', 'Assainissement & Fosses', 'Pompage & Forage'],
-      bio: 'Atelier collectif d\'artisans plombiers et thermiciens certifiés pour grands chantiers et résidences.',
-      gallery: [
-        { id: 201, title: 'Rénovation Salle de Bain de Luxe', img: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80' },
-        { id: 202, title: 'Centrale de Chauffage Villa Bastos', img: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=800&q=80' },
-        { id: 203, title: 'Système de Pompage et Filtration', img: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=800&q=80' }
-      ]
-    }
-  ]);
+  // Server data
+  const [artisans, setArtisans] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [bookmarks, setBookmarks] = useState([]);
+  const [loading, setLoading] = useState({ artisans: true, orders: true, bookmarks: true });
+  const [loadError, setLoadError] = useState('');
 
-  // Initial Active Orders State
-  const [orders, setOrders] = useState([
-    {
-      id: 'SK-9041',
-      title: '⚡ Dépannage Tableau Électrique & Court-Circuit',
-      artisan: 'Emmanuel Ngu',
-      profession: 'Master Électricien',
-      date: 'Aujourd\'hui, 14:00',
-      location: 'Yaoundé (Bastos)',
-      amount: 45000,
-      status: 'IN_PROGRESS',
-      step: 4, // 1 to 5
-      whatsapp: '237675421099',
-      escrowLocked: true
-    },
-    {
-      id: 'SK-8812',
-      title: '🔧 Réparation Fuite d\'Eau & Mitigeur Cuisine',
-      artisan: 'Atelier Central Tuyauterie & Bâtiment',
-      profession: 'Plombier Sanitaire',
-      date: 'Demain, 10:30',
-      location: 'Yaoundé (Biyem-Assi)',
-      amount: 30000,
-      status: 'ON_THE_WAY',
-      step: 3,
-      whatsapp: '237699887766',
-      escrowLocked: true
-    }
-  ]);
+  // Dialogs
+  const [bookingTarget, setBookingTarget] = useState(null);
+  const [payingOrder, setPayingOrder] = useState(null);
+  const [reviewOrder, setReviewOrder] = useState(null);
+  const [busy, setBusy] = useState(false);
 
-  // Initial History Orders State
-  const [historyOrders, setHistoryOrders] = useState([
-    {
-      id: 'SK-7201',
-      title: '❄️ Entretien & Recharge Gaz Climatiseur Split',
-      artisan: 'Alain Foe',
-      profession: 'Technicien Froid & Clim',
-      date: '12 Août 2026',
-      location: 'Yaoundé (Omnisports)',
-      amount: 25000,
-      status: 'COMPLETED',
-      whatsapp: '237677112233',
-      reviewed: true,
-      rating: 5
+  // ── Loading ────────────────────────────────────────────────────────────────
+  const loadArtisans = useCallback(async () => {
+    setLoading((l) => ({ ...l, artisans: true }));
+    try {
+      const res = await api('/professionals', { auth: false });
+      setArtisans((res.data || []).map(mapProfessional));
+      setLoadError('');
+    } catch (err) {
+      setLoadError(err.message);
+    } finally {
+      setLoading((l) => ({ ...l, artisans: false }));
     }
-  ]);
+  }, []);
 
-  // Sample Artisans List with Rich Profile Data for Read-Only Navigation
-  const artisans = [
-    {
-      id: 1,
-      name: 'Emmanuel Ngu',
-      businessName: 'Ngu Solar & High-Voltage Systems',
-      type: 'Single Artisan (Master Specialist)',
-      profession: 'Master Electrician & Solar',
-      city: 'Douala (Akwa)',
-      location: 'Akwa & Bonanjo, Douala',
-      rating: 4.9,
-      reviews: 38,
-      verified: true,
-      priceRate: '15 000 FCFA / visite',
-      phone: '+237 675 42 10 99',
-      whatsapp: '237675421099',
-      image: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80',
-      coverPhoto: 'https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=1600&q=85',
-      badge: 'PRO MASTER VÉRIFIÉ',
-      experience: '08 ans',
-      skills: ['Tableaux Divisionnaires', 'Centrales Photovoltaïques', 'Groupes Électrogènes', 'Mise à la Terre & Parasurtenseur', 'Éclairage Architectural'],
-      bio: 'Master électricien certifié avec 8 ans d\'expérience dans l\'ingénierie électrique haute et basse tension et les installations solaires clés en main à Douala et Yaoundé.',
-      gallery: [
-        { id: 101, title: 'Centrale Solaire Résidentielle 5kVA', img: 'https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=800&q=80' },
-        { id: 102, title: 'Câblage Armoire Électrique Triphasée', img: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80' },
-        { id: 103, title: 'Installation Onduleur Hybride & Batteries', img: 'https://images.unsplash.com/photo-1544725176-7c40e5a71c5e?auto=format&fit=crop&w=800&q=80' }
-      ]
-    },
-    {
-      id: 2,
-      name: 'Atelier Central Tuyauterie & Bâtiment',
-      businessName: 'Atelier Central BTP & Fluides Cameroun',
-      type: 'Grouped Artisan (Workshop)',
-      profession: 'Sanitary Plumbing & Industrial Heating',
-      city: 'Yaoundé (Bastos & Biyem-Assi)',
-      location: 'Bastos, Yaoundé',
-      rating: 5.0,
-      reviews: 94,
-      verified: true,
-      priceRate: '25 000 FCFA / intervention',
-      phone: '+237 699 88 77 66',
-      whatsapp: '237699887766',
-      image: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=600&q=80',
-      coverPhoto: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=1600&q=85',
-      badge: 'ENTERPRISE CERTIFIED',
-      experience: '12 ans',
-      skills: ['Tuyauterie Cuivre & Inox', 'Chauffe-eau Solaire', 'Dépannage Fuite 24/7', 'Assainissement & Fosses', 'Pompage & Forage'],
-      bio: 'Groupement d\'artisans chevronnés en plomberie sanitaire, canalisations souterraines et distribution d\'eau pour villas, immeubles et commerces.',
-      gallery: [
-        { id: 201, title: 'Rénovation Salle de Bain de Luxe', img: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80' },
-        { id: 202, title: 'Centrale de Chauffage Villa Bastos', img: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=800&q=80' },
-        { id: 203, title: 'Installation Tuyauterie Inox Industrielle', img: 'https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&w=800&q=80' },
-        { id: 204, title: 'Système de Pompage et Filtration', img: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=800&q=80' }
-      ]
-    },
-    {
-      id: 3,
-      name: 'Kamga & Fils Menuiserie Moderne',
-      businessName: 'Ébénisterie Kamga & Mobilier Haut de Gamme',
-      type: 'Grouped Artisan (Workshop)',
-      profession: 'Custom Kitchens & Luxury Woodwork',
-      city: 'Douala (Bonapriso)',
-      location: 'Bonapriso & Akwa, Douala',
-      rating: 4.8,
-      reviews: 52,
-      verified: true,
-      priceRate: '45 000 FCFA / devis',
-      phone: '+237 670 12 34 56',
-      whatsapp: '237670123456',
-      image: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=600&q=80',
-      coverPhoto: 'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=1600&q=85',
-      badge: 'TOP COLLECTIVE',
-      experience: '15 ans',
-      skills: ['Cuisines Américaines Sur Mesure', 'Dressings & Placards', 'Portes Blindées en Bois Massif', 'Parquet Massif', 'Traitement Anti-termites'],
-      bio: 'Atelier familial de menuiserie fine et d\'agencement d\'intérieur en bois précieux locaux (Ayous, Iroko, Padouk).',
-      gallery: [
-        { id: 301, title: 'Cuisine Moderne en Bois Massif Iroko', img: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=800&q=80' },
-        { id: 302, title: 'Placard Dressing Intégré sur Mesure', img: 'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=800&q=80' }
-      ]
-    },
-    {
-      id: 4,
-      name: 'Alain Foe',
-      businessName: 'Foe Frigo & Froid Cameroun',
-      type: 'Single Artisan (Master Specialist)',
-      profession: 'AC & Cold Room Refrigeration',
-      city: 'Yaoundé (Mvan)',
-      location: 'Mvan & Omnisports, Yaoundé',
-      rating: 4.7,
-      reviews: 14,
-      verified: false,
-      priceRate: '20 000 FCFA / diagnostic',
-      phone: '+237 677 11 22 33',
-      whatsapp: '237677112233',
-      image: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=600&q=80',
-      coverPhoto: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=1600&q=85',
-      badge: 'NOUVEAU PRO',
-      experience: '06 ans',
-      skills: ['Climatiseurs Split & Inverter', 'Recharge Fréon R410a / R32', 'Chambres Froides Positives/Négatives', 'Nettoyage Échangeurs & Filtres'],
-      bio: 'Technicien frigoriste qualifié pour le dépannage rapide, l\'entretien préventif et la recharge gaz de climatiseurs résidentiels et chambres froides.',
-      gallery: [
-        { id: 401, title: 'Installation Mini-Split Inverter 2CV', img: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=800&q=80' },
-        { id: 402, title: 'Maintenance Groupe Compresseur Froid', img: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=800&q=80' }
-      ]
+  const loadOrders = useCallback(async () => {
+    setLoading((l) => ({ ...l, orders: true }));
+    try {
+      const [reqRes, payRes] = await Promise.all([api('/requests'), api('/payments/history')]);
+      setRequests(reqRes.data || []);
+      setPayments(payRes.data || []);
+    } catch (err) {
+      triggerToast(err.message, '⚠️');
+    } finally {
+      setLoading((l) => ({ ...l, orders: false }));
     }
-  ];
+  }, [triggerToast]);
 
-  // Total Escrow Locked Amount calculation
+  const loadBookmarks = useCallback(async () => {
+    setLoading((l) => ({ ...l, bookmarks: true }));
+    try {
+      const res = await api('/bookmarks');
+      setBookmarks(
+        (res.data || [])
+          .filter((b) => b.professionalId)
+          .map((b) => mapProfessional(b.professionalId))
+      );
+    } catch (err) {
+      triggerToast(err.message, '⚠️');
+    } finally {
+      setLoading((l) => ({ ...l, bookmarks: false }));
+    }
+  }, [triggerToast]);
+
+  useEffect(() => {
+    loadArtisans();
+    loadOrders();
+    loadBookmarks();
+  }, [loadArtisans, loadOrders, loadBookmarks]);
+
+  const orders = useMemo(() => requests.map((r) => mapRequest(r, payments)), [requests, payments]);
+  const activeOrders = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
+  const historyOrders = orders.filter((o) => !ACTIVE_STATUSES.includes(o.status));
   const totalEscrowLocked = orders.reduce((sum, o) => sum + (o.escrowLocked ? o.amount : 0), 0);
 
-  // Actions
-  const handleValidateWorkEnd = (orderId) => {
-    const targetOrder = orders.find(o => o.id === orderId);
-    if (!targetOrder) return;
+  const filteredArtisans = artisans.filter((a) => {
+    if (selectedFilter === 'VERIFIED' && !a.verified) return false;
+    if (selectedFilter === 'SINGLE' && a.isGrouped) return false;
+    if (selectedFilter === 'GROUPED' && !a.isGrouped) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return [a.name, a.profession, a.city, ...(a.skills || [])].some((v) => String(v).toLowerCase().includes(q));
+    }
+    return true;
+  });
 
-    setOrders(prev => prev.filter(o => o.id !== orderId));
-    setHistoryOrders(prev => [
-      {
-        ...targetOrder,
-        status: 'COMPLETED',
-        step: 5,
-        escrowLocked: false,
-        reviewed: false
-      },
-      ...prev
-    ]);
+  // ── Actions ────────────────────────────────────────────────────────────────
+  const updateStatus = async (order, status, successMsg) => {
+    setBusy(true);
+    try {
+      await api(`/requests/${order.id}`, { method: 'PUT', body: { status } });
+      triggerToast(successMsg, status === 'COMPLETED' ? '🎉' : 'ℹ️');
+      await loadOrders();
+    } catch (err) {
+      triggerToast(err.message, '⚠️');
+    } finally {
+      setBusy(false);
+    }
+  };
 
-    triggerToast(
-      isFrench
-        ? `Travaux #${orderId} validés ! Séquestre de ${targetOrder.amount.toLocaleString()} FCFA libéré pour l'artisan.`
-        : `Order #${orderId} completed! Escrow of ${targetOrder.amount.toLocaleString()} FCFA released to artisan.`,
-      '🎉'
+  const handleValidateWorkEnd = (order) => {
+    const msg = order.escrowLocked
+      ? tr(
+          `Travaux ${order.ref} validés ! ${formatFCFA(order.amount)} libérés pour l'artisan.`,
+          `Order ${order.ref} completed! ${formatFCFA(order.amount)} released to the artisan.`
+        )
+      : tr(`Travaux ${order.ref} validés !`, `Order ${order.ref} marked as completed!`);
+    if (!window.confirm(tr('Confirmez-vous que les travaux sont terminés ? Le paiement sera versé à l\'artisan.', 'Confirm the work is finished? The payment will be released to the artisan.'))) return;
+    updateStatus(order, 'COMPLETED', msg);
+  };
+
+  const handleCancelOrder = (order) => {
+    if (!window.confirm(tr('Annuler cette réservation ?', 'Cancel this booking?'))) return;
+    updateStatus(
+      order,
+      'CANCELLED',
+      order.escrowLocked
+        ? tr(`Réservation ${order.ref} annulée. Remboursement en cours.`, `Booking ${order.ref} cancelled. Refund pending.`)
+        : tr(`Réservation ${order.ref} annulée.`, `Booking ${order.ref} cancelled.`)
     );
   };
 
-  const handleCancelOrder = (orderId) => {
-    setOrders(prev => prev.filter(o => o.id !== orderId));
-    triggerToast(
-      isFrench
-        ? `Réservation #${orderId} annulée. Montant remboursé sur votre portefeuille.`
-        : `Booking #${orderId} cancelled. Refunded to wallet.`,
-      'ℹ️'
-    );
+  const handleToggleBookmark = async (artisan) => {
+    try {
+      const res = await api('/bookmarks/toggle', { method: 'POST', body: { professionalId: artisan.id } });
+      triggerToast(
+        res.isBookmarked ? tr('Ajouté aux favoris', 'Added to bookmarks') : tr('Artisan retiré des favoris', 'Removed from bookmarks'),
+        res.isBookmarked ? '⭐' : '🗑️'
+      );
+      loadBookmarks();
+    } catch (err) {
+      triggerToast(err.message, '⚠️');
+    }
   };
 
-  const handleRemoveBookmark = (id) => {
-    setBookmarks(prev => prev.filter(b => b.id !== id));
-    triggerToast(isFrench ? 'Artisan retiré des favoris' : 'Artisan removed from bookmarks', '🗑️');
-  };
-
-  const handleDownloadInvoice = (orderId) => {
-    triggerToast(
-      isFrench ? `Téléchargement de la Facture PDF #${orderId}...` : `Downloading PDF Invoice #${orderId}...`,
-      '📄'
-    );
+  const handleDownloadInvoice = (order) => {
+    const win = window.open('', '_blank');
+    if (!win) {
+      triggerToast(tr('Autorisez les fenêtres pop-up pour télécharger la facture.', 'Allow pop-ups to download the invoice.'), '⚠️');
+      return;
+    }
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Facture ${esc(order.ref)}</title>
+      <style>body{font-family:Arial,sans-serif;max-width:640px;margin:40px auto;color:#222}h1{color:#1f3a34}td{padding:6px 12px 6px 0}.total{font-size:1.3em;font-weight:bold}</style></head><body>
+      <h1>Skillora — Facture</h1>
+      <p><strong>Référence :</strong> ${esc(order.ref)}<br><strong>Date :</strong> ${esc(formatDate(order.date, lang))}</p>
+      <table>
+        <tr><td>Client</td><td>${esc(currentUser?.name)}</td></tr>
+        <tr><td>Artisan</td><td>${esc(order.artisan)} (${esc(order.profession)})</td></tr>
+        <tr><td>Prestation</td><td>${esc(order.description)}</td></tr>
+        <tr><td>Lieu</td><td>${esc(order.location)}</td></tr>
+        <tr><td>Statut</td><td>${esc(order.status)}</td></tr>
+        ${order.payment ? `<tr><td>Transaction</td><td>${esc(order.payment.payinTransactionId)}</td></tr>
+        <tr><td>Frais plateforme (2%)</td><td>${esc(formatFCFA(order.payment.platformFee))}</td></tr>` : ''}
+      </table>
+      <p class="total">Total : ${esc(formatFCFA(order.amount))}</p>
+      <script>window.print()</script></body></html>`);
+    win.document.close();
   };
 
   const openWhatsApp = (phone, text = '') => {
+    if (!phone) {
+      triggerToast(tr("Cet artisan n'a pas encore de numéro WhatsApp.", 'This artisan has no WhatsApp number yet.'), 'ℹ️');
+      return;
+    }
     const defaultMsg = encodeURIComponent(
-      text || (isFrench ? "Bonjour, je vous contacte depuis mon espace client Skillora." : "Hello, contacting you from Skillora Client Workspace.")
+      text || tr('Bonjour, je vous contacte depuis mon espace client Skillora.', 'Hello, contacting you from Skillora Client Workspace.')
     );
-    window.open(`https://wa.me/${phone}?text=${defaultMsg}`, '_blank');
+    window.open(`https://wa.me/${phone}?text=${defaultMsg}`, '_blank', 'noopener');
   };
+
+  const openArtisanFromOrder = (order) => {
+    const match = artisans.find((a) => String(a.id) === String(order.professionalId));
+    if (onSelectArtisan) onSelectArtisan(match || { id: order.professionalId, name: order.artisan, profession: order.profession });
+  };
+
+  // ── Render helpers ─────────────────────────────────────────────────────────
+  const renderArtisanCard = (artisan, { favorite = false } = {}) => (
+    <div
+      key={artisan.id}
+      className="artisan-card-luxury clickable-profile-card"
+      onClick={() => onSelectArtisan && onSelectArtisan(artisan)}
+      title={tr(`Consulter le profil de ${artisan.name}`, `View ${artisan.name}'s profile`)}
+    >
+      <div className="artisan-card-img-wrap">
+        <img src={artisan.image} alt={artisan.name} />
+        <span className="artisan-badge-tag">{favorite ? 'FAVORI ✓' : artisan.badge}</span>
+        <span className="artisan-structure-tag">
+          {artisan.isGrouped ? '🏢 Atelier Groupé' : '🧑‍🔧 Solo Pro'}
+        </span>
+        <div className="card-hover-profile-hint">
+          <span>👁️ {tr('Voir Profil', 'View Profile')}</span>
+        </div>
+      </div>
+
+      <div className="artisan-card-body">
+        <div className="artisan-rating-row">
+          <span className="stars">★ {artisan.rating ? artisan.rating.toFixed(1) : '—'}</span>
+          <span className="review-count">({artisan.reviews} {tr('avis', 'reviews')})</span>
+          {artisan.verified ? (
+            <span className="verified-check">✓ {tr('VÉRIFIÉ', 'VERIFIED')}</span>
+          ) : (
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginLeft: 'auto' }}>{tr('Indépendant', 'Independent')}</span>
+          )}
+        </div>
+
+        <h3 className="artisan-card-name">{artisan.name}</h3>
+        <p className="artisan-card-prof">{artisan.profession}</p>
+        <p className="artisan-card-location">📍 {artisan.city || tr('Localisation non précisée', 'Location not set')}</p>
+        {!favorite && <p className="artisan-price-tag">{tr('Tarif', 'Rate')}: <strong>{artisan.priceRate}</strong></p>}
+
+        <div className="artisan-card-actions">
+          <button
+            type="button"
+            className="btn-view-profile-card"
+            onClick={(e) => { e.stopPropagation(); if (onSelectArtisan) onSelectArtisan(artisan); }}
+          >
+            👁️ {tr('Consulter le Profil', 'View Profile')}
+          </button>
+          <button
+            type="button"
+            className="btn-whatsapp-card"
+            onClick={(e) => { e.stopPropagation(); openWhatsApp(artisan.whatsapp); }}
+          >
+            💬 WhatsApp
+          </button>
+          {favorite ? (
+            <button
+              type="button"
+              className="btn-cancel-action"
+              onClick={(e) => { e.stopPropagation(); handleToggleBookmark(artisan); }}
+            >
+              🗑️ {tr('Retirer', 'Remove')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn-book-card"
+              onClick={(e) => { e.stopPropagation(); setBookingTarget(artisan); }}
+            >
+              {tr('Réserver', 'Book')} →
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderEmpty = (icon, title, text, action) => (
+    <div className="empty-panel-box">
+      <span>{icon}</span>
+      <h3>{title}</h3>
+      <p>{text}</p>
+      {action}
+    </div>
+  );
+
+  const clientName = currentUser?.name || tr('Client', 'Client');
 
   return (
     <div className="client-dashboard-container">
-      {/* ==========================================================================
-          SECTION 1: HEADER & PROFILE OVERVIEW WITH KPI STATS
-          ========================================================================== */}
+      {/* HEADER & PROFILE OVERVIEW */}
       <div className="client-profile-header-card">
         <div className="client-profile-main-info">
-          <div className="client-avatar-large-wrap" onClick={onOpenSettings} style={{ cursor: 'pointer' }} title={isFrench ? "Changer la photo de profil" : "Change profile picture"}>
+          <div className="client-avatar-large-wrap" onClick={onOpenSettings} style={{ cursor: 'pointer' }} title={tr('Changer la photo de profil', 'Change profile picture')}>
             <img
-              src={currentUser?.profileImage || currentUser?.avatar || "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80"}
-              alt="Client Avatar"
+              src={currentUser?.profileImage || avatarFor(clientName)}
+              alt={clientName}
               className="client-avatar-img"
             />
-            <span className="client-verified-badge" title="Client Biométriquement Vérifié">✓</span>
             <span className="avatar-edit-overlay-btn">📷</span>
           </div>
 
           <div className="client-profile-details">
-            <div className="client-badge-pill">🇨🇲 CLIENT VÉRIFIÉ • MEMBRE PREMIUM</div>
-            <h1 className="client-profile-name">{currentUser?.name || 'Valerie Mbida'}</h1>
-            <p className="client-location-sub">📍 Yaoundé (Bastos) & Douala (Akwa) • {currentUser?.phone || '+237 670 00 00 00'}</p>
+            <div className="client-badge-pill">🇨🇲 {tr('ESPACE CLIENT', 'CLIENT WORKSPACE')}</div>
+            <h1 className="client-profile-name">{clientName}</h1>
+            <p className="client-location-sub">
+              📍 {currentUser?.city || tr('Ville non renseignée', 'City not set')}
+              {currentUser?.phone ? ` • ${currentUser.phone}` : ''}
+            </p>
+            {totalEscrowLocked > 0 && (
+              <p className="client-location-sub">🔒 {tr('En séquestre', 'In escrow')} : <strong>{formatFCFA(totalEscrowLocked)}</strong></p>
+            )}
           </div>
         </div>
       </div>
 
-      {/* KPI Stats Cards Grid */}
-      <div className="client-kpi-grid">
-        <div className="client-kpi-card" onClick={() => { setActiveTab('ORDERS'); setOrdersSubTab('ACTIVE'); }}>
-          <div className="kpi-icon-wrap gold">📋</div>
-          <div className="kpi-data">
-            <span className="kpi-number">{orders.length}</span>
-            <span className="kpi-label">{isFrench ? 'Réservations en cours' : 'Active Bookings'}</span>
-          </div>
-        </div>
-
-        <div className="client-kpi-card" onClick={() => setActiveTab('ORDERS')}>
-          <div className="kpi-icon-wrap emerald">📥</div>
-          <div className="kpi-data">
-            <span className="kpi-number">3</span>
-            <span className="kpi-label">{isFrench ? 'Demandes & Devis reçus' : 'Pending Quotes'}</span>
-          </div>
-        </div>
-
-        <div className="client-kpi-card highlight" onClick={() => setActiveTab('PAYMENTS')}>
-          <div className="kpi-icon-wrap purple">🔒</div>
-          <div className="kpi-data">
-            <span className="kpi-number">{totalEscrowLocked.toLocaleString()} <small>FCFA</small></span>
-            <span className="kpi-label">{isFrench ? 'Garantie Séquestre Bloquée' : 'Escrow Guarantee Locked'}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ==========================================================================
-          CLIENT NAVIGATION TABS
-          ========================================================================== */}
+      {/* NAVIGATION TABS */}
       <nav className="client-tabs-nav">
-        <button
-          className={`client-nav-tab ${activeTab === 'OVERVIEW' ? 'active' : ''}`}
-          onClick={() => setActiveTab('OVERVIEW')}
-        >
-          🔍 {isFrench ? 'Explorer & Artisans' : 'Explore Artisans'}
+        <button className={`client-nav-tab ${activeTab === 'OVERVIEW' ? 'active' : ''}`} onClick={() => setActiveTab('OVERVIEW')}>
+          🔍 {tr('Explorer & Artisans', 'Explore Artisans')}
         </button>
-
-        <button
-          className={`client-nav-tab ${activeTab === 'ORDERS' ? 'active' : ''}`}
-          onClick={() => setActiveTab('ORDERS')}
-        >
-          📋 {isFrench ? 'Mes Réservations' : 'My Orders'} ({orders.length})
+        <button className={`client-nav-tab ${activeTab === 'ORDERS' ? 'active' : ''}`} onClick={() => setActiveTab('ORDERS')}>
+          📋 {tr('Mes Réservations', 'My Orders')} ({activeOrders.length})
         </button>
-
-        <button
-          className={`client-nav-tab ${activeTab === 'MESSAGES' ? 'active' : ''}`}
-          onClick={() => setActiveTab('MESSAGES')}
-        >
-          💬 {isFrench ? 'Messagerie & Chat' : 'Messages'}
+        <button className={`client-nav-tab ${activeTab === 'BOOKMARKS' ? 'active' : ''}`} onClick={() => setActiveTab('BOOKMARKS')}>
+          ⭐ {tr('Favoris', 'Bookmarks')} ({bookmarks.length})
         </button>
-
-        <button
-          className={`client-nav-tab ${activeTab === 'BOOKMARKS' ? 'active' : ''}`}
-          onClick={() => setActiveTab('BOOKMARKS')}
-        >
-          ⭐ {isFrench ? 'Favoris Mémorisés' : 'Bookmarks'} ({bookmarks.length})
+        <button className={`client-nav-tab ${activeTab === 'PAYMENTS' ? 'active' : ''}`} onClick={() => setActiveTab('PAYMENTS')}>
+          💳 {tr('Paiements & Sécurité', 'Payments')}
         </button>
-
-        <button
-          className={`client-nav-tab ${activeTab === 'PAYMENTS' ? 'active' : ''}`}
-          onClick={() => setActiveTab('PAYMENTS')}
-        >
-          💳 {isFrench ? 'Paiements & Sécurité' : 'Payments'}
-        </button>
-
-        <button
-          className={`client-nav-tab ${activeTab === 'SETTINGS' ? 'active' : ''}`}
-          onClick={() => setActiveTab('SETTINGS')}
-        >
-          ⚙️ {isFrench ? 'Paramètres Compte' : 'Settings'}
+        <button className={`client-nav-tab ${activeTab === 'SETTINGS' ? 'active' : ''}`} onClick={() => setActiveTab('SETTINGS')}>
+          ⚙️ {tr('Paramètres Compte', 'Settings')}
         </button>
       </nav>
 
-      {/* ==========================================================================
-          TAB 1: OVERVIEW & ARTISANS DIRECTORY
-          ========================================================================== */}
+      {/* TAB 1: ARTISANS DIRECTORY */}
       {activeTab === 'OVERVIEW' && (
         <div className="tab-content-panel">
-          {/* Search bar */}
           <div className="client-search-bar" style={{ marginBottom: '1.5rem' }}>
             <span className="search-icon">🔍</span>
             <input
               type="text"
-              placeholder={isFrench ? "Rechercher électricien, plombier, menuisier à Douala ou Yaoundé..." : "Search electrician, plumber, carpenter in Douala or Yaoundé..."}
+              placeholder={tr('Rechercher électricien, plombier, menuisier à Douala ou Yaoundé...', 'Search electrician, plumber, carpenter in Douala or Yaoundé...')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="client-search-input"
             />
-            <button className="btn-search-action">{isFrench ? 'Recherche IA' : 'AI Search'} →</button>
           </div>
 
-          {/* Filter Pills */}
           <div className="category-filter-bar" style={{ marginBottom: '1.75rem' }}>
             <button className={`filter-pill ${selectedFilter === 'ALL' ? 'active' : ''}`} onClick={() => setSelectedFilter('ALL')}>
-              {isFrench ? 'Tous les Artisans' : 'All Artisans'}
+              {tr('Tous les Artisans', 'All Artisans')}
             </button>
             <button className={`filter-pill ${selectedFilter === 'VERIFIED' ? 'active' : ''}`} onClick={() => setSelectedFilter('VERIFIED')} style={{ borderColor: 'var(--artisan-border)', color: 'var(--artisan-accent)' }}>
-              🛡️ {isFrench ? 'Badge Vérifié Uniquement (✓)' : 'Verified Only (✓)'}
+              🛡️ {tr('Badge Vérifié Uniquement (✓)', 'Verified Only (✓)')}
             </button>
             <button className={`filter-pill ${selectedFilter === 'SINGLE' ? 'active' : ''}`} onClick={() => setSelectedFilter('SINGLE')}>
               🧑‍🔧 {t.singleArtisan}
@@ -421,198 +360,107 @@ export default function ClientDashboard({
             </button>
           </div>
 
-          {/* Artisans Grid */}
-          <div className="artisans-grid">
-            {artisans
-              .filter((a) => {
-                if (selectedFilter === 'VERIFIED') return a.verified === true;
-                if (selectedFilter === 'SINGLE') return a.type.includes('Single');
-                if (selectedFilter === 'GROUPED') return a.type.includes('Grouped');
-                if (searchQuery.trim()) {
-                  const q = searchQuery.toLowerCase();
-                  return a.name.toLowerCase().includes(q) || a.profession.toLowerCase().includes(q) || a.city.toLowerCase().includes(q);
-                }
-                return true;
-              })
-              .map((artisan) => (
-                <div
-                  key={artisan.id}
-                  className="artisan-card-luxury clickable-profile-card"
-                  onClick={() => onSelectArtisan && onSelectArtisan(artisan)}
-                  title={isFrench ? `Consulter le profil de ${artisan.name}` : `View ${artisan.name}'s profile`}
-                >
-                  <div className="artisan-card-img-wrap">
-                    <img src={artisan.image} alt={artisan.name} />
-                    <span className="artisan-badge-tag">{artisan.badge}</span>
-                    <span className="artisan-structure-tag">
-                      {artisan.type.includes('Grouped') ? '🏢 Atelier Groupé' : '🧑‍🔧 Solo Pro'}
-                    </span>
-                    <div className="card-hover-profile-hint">
-                      <span>👁️ {isFrench ? 'Voir Profil' : 'View Profile'}</span>
-                    </div>
-                  </div>
-
-                  <div className="artisan-card-body">
-                    <div className="artisan-rating-row">
-                      <span className="stars">★ {artisan.rating}</span>
-                      <span className="review-count">({artisan.reviews} avis)</span>
-                      {artisan.verified ? (
-                        <span className="verified-check">✓ VÉRIFIÉ</span>
-                      ) : (
-                        <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginLeft: 'auto' }}>Indépendant</span>
-                      )}
-                    </div>
-
-                    <h3 className="artisan-card-name">{artisan.name}</h3>
-                    <p className="artisan-card-prof">{artisan.profession}</p>
-                    <p className="artisan-card-location">📍 {artisan.city}</p>
-                    <p className="artisan-price-tag">Tarif: <strong>{artisan.priceRate}</strong></p>
-
-                    <div className="artisan-card-actions">
-                      <button
-                        type="button"
-                        className="btn-view-profile-card"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (onSelectArtisan) onSelectArtisan(artisan);
-                        }}
-                      >
-                        👁️ {isFrench ? 'Consulter le Profil' : 'View Profile'}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-whatsapp-card"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openWhatsApp(artisan.whatsapp);
-                        }}
-                      >
-                        💬 WhatsApp
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-book-card"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          triggerToast(isFrench ? `Réservation envoyée à ${artisan.name} !` : `Booking request sent to ${artisan.name}!`, '⭐');
-                        }}
-                      >
-                        {isFrench ? 'Réserver' : 'Book'} →
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-          </div>
+          {loading.artisans ? (
+            renderEmpty('⏳', tr('Chargement des artisans…', 'Loading artisans…'), '')
+          ) : loadError ? (
+            renderEmpty('⚠️', tr('Impossible de charger les artisans', 'Could not load artisans'), loadError,
+              <button className="btn-primary-gold" onClick={loadArtisans}>{tr('Réessayer', 'Retry')}</button>)
+          ) : filteredArtisans.length === 0 ? (
+            renderEmpty('🔍', tr('Aucun artisan trouvé', 'No artisans found'), tr('Essayez une autre recherche ou un autre filtre.', 'Try another search or filter.'))
+          ) : (
+            <div className="artisans-grid">{filteredArtisans.map((a) => renderArtisanCard(a))}</div>
+          )}
         </div>
       )}
 
-      {/* ==========================================================================
-          TAB 2: GESTION DES RÉSERVATIONS & COMMANDES (EN COURS & HISTORIQUE)
-          ========================================================================== */}
+      {/* TAB 2: ORDERS */}
       {activeTab === 'ORDERS' && (
         <div className="tab-content-panel">
           <div className="subtabs-bar">
-            <button
-              className={`subtab-btn ${ordersSubTab === 'ACTIVE' ? 'active' : ''}`}
-              onClick={() => setOrdersSubTab('ACTIVE')}
-            >
-              🟡 {isFrench ? 'Interventions En Cours' : 'Active Interventions'} ({orders.length})
+            <button className={`subtab-btn ${ordersSubTab === 'ACTIVE' ? 'active' : ''}`} onClick={() => setOrdersSubTab('ACTIVE')}>
+              🟡 {tr('Interventions En Cours', 'Active Interventions')} ({activeOrders.length})
             </button>
-            <button
-              className={`subtab-btn ${ordersSubTab === 'HISTORY' ? 'active' : ''}`}
-              onClick={() => setOrdersSubTab('HISTORY')}
-            >
-              📜 {isFrench ? 'Historique & Factures' : 'History & Invoices'} ({historyOrders.length})
+            <button className={`subtab-btn ${ordersSubTab === 'HISTORY' ? 'active' : ''}`} onClick={() => setOrdersSubTab('HISTORY')}>
+              📜 {tr('Historique & Factures', 'History & Invoices')} ({historyOrders.length})
             </button>
           </div>
 
-          {/* ACTIVE ORDERS */}
           {ordersSubTab === 'ACTIVE' && (
             <div className="orders-stack-list">
-              {orders.length === 0 ? (
-                <div className="empty-panel-box">
-                  <span>📋</span>
-                  <h3>{isFrench ? 'Aucune réservation en cours' : 'No active bookings'}</h3>
-                  <p>{isFrench ? 'Réservez un artisan qualifié sur la plateforme' : 'Explore artisans to book a professional'}</p>
-                  <button className="btn-primary-gold" onClick={() => setActiveTab('OVERVIEW')}>
-                    {isFrench ? 'Explorer les Artisans →' : 'Explore Artisans →'}
-                  </button>
-                </div>
+              {loading.orders ? (
+                renderEmpty('⏳', tr('Chargement…', 'Loading…'), '')
+              ) : activeOrders.length === 0 ? (
+                renderEmpty('📋', tr('Aucune réservation en cours', 'No active bookings'), tr('Réservez un artisan qualifié sur la plateforme', 'Explore artisans to book a professional'),
+                  <button className="btn-primary-gold" onClick={() => setActiveTab('OVERVIEW')}>{tr('Explorer les Artisans →', 'Explore Artisans →')}</button>)
               ) : (
-                orders.map((order) => (
+                activeOrders.map((order) => (
                   <div key={order.id} className="client-order-card">
                     <div className="order-header-row">
                       <div>
-                        <span className="order-id-pill">{order.id}</span>
+                        <span className="order-id-pill">{order.ref}</span>
                         <h3 className="order-service-title">{order.title}</h3>
                         <p className="order-meta-info">
                           🧑‍🔧 <strong
                             style={{ cursor: 'pointer', color: 'var(--primary)', textDecoration: 'underline' }}
-                            onClick={() => {
-                              const match = artisans.find((a) => a.name === order.artisan) || {
-                                name: order.artisan,
-                                profession: order.profession,
-                                city: order.location,
-                                location: order.location,
-                                phone: order.whatsapp,
-                                whatsapp: order.whatsapp
-                              };
-                              if (onSelectArtisan) onSelectArtisan(match);
-                            }}
-                            title={isFrench ? "Consulter le profil de l'artisan" : "View artisan profile"}
+                            onClick={() => openArtisanFromOrder(order)}
+                            title={tr("Consulter le profil de l'artisan", 'View artisan profile')}
                           >
                             {order.artisan}
-                          </strong> ({order.profession}) • 📍 {order.location} • 🕒 {order.date}
+                          </strong> ({order.profession}) • 📍 {order.location || '—'} • 🕒 {formatDate(order.date, lang)}
                         </p>
                       </div>
 
                       <div className="order-amount-box">
-                        <span className="amount-num">{order.amount.toLocaleString()} FCFA</span>
-                        <span className="escrow-locked-badge">🔒 {isFrench ? 'Séquestre Verrouillé' : 'Escrow Locked'}</span>
+                        <span className="amount-num">{order.amount ? formatFCFA(order.amount) : tr('Sur devis', 'Quote')}</span>
+                        {order.escrowLocked && <span className="escrow-locked-badge">🔒 {tr('Séquestre Verrouillé', 'Escrow Locked')}</span>}
+                        {order.payment?.status === 'PENDING' && <span className="escrow-locked-badge">⏳ {tr('Paiement en attente', 'Payment pending')}</span>}
                       </div>
                     </div>
 
-                    {/* Live Realtime Status Stepper */}
                     <div className="client-status-stepper">
                       <div className="stepper-track">
                         <div className="stepper-fill" style={{ width: `${((order.step - 1) / 4) * 100}%` }}></div>
                       </div>
-                      <div className={`step-point ${order.step >= 1 ? 'completed' : ''}`}>
-                        <div className="point-dot">1</div>
-                        <span className="point-label">{isFrench ? 'Demandé' : 'Requested'}</span>
-                      </div>
-                      <div className={`step-point ${order.step >= 2 ? 'completed' : ''}`}>
-                        <div className="point-dot">2</div>
-                        <span className="point-label">{isFrench ? 'Confirmé' : 'Confirmed'}</span>
-                      </div>
-                      <div className={`step-point ${order.step >= 3 ? 'completed' : ''}`}>
-                        <div className="point-dot">3</div>
-                        <span className="point-label">{isFrench ? 'En Route' : 'On The Way'}</span>
-                      </div>
-                      <div className={`step-point ${order.step >= 4 ? 'completed' : ''}`}>
-                        <div className="point-dot">4</div>
-                        <span className="point-label">{isFrench ? 'Travaux En Cours' : 'In Progress'}</span>
-                      </div>
-                      <div className={`step-point ${order.step >= 5 ? 'completed' : ''}`}>
-                        <div className="point-dot">5</div>
-                        <span className="point-label">{isFrench ? 'Terminé' : 'Completed'}</span>
-                      </div>
+                      {[
+                        tr('Demandé', 'Requested'),
+                        tr('Accepté', 'Accepted'),
+                        tr('Payé (Séquestre)', 'Paid (Escrow)'),
+                        tr('Travaux En Cours', 'In Progress'),
+                        tr('Terminé', 'Completed'),
+                      ].map((label, idx) => (
+                        <div key={label} className={`step-point ${order.step >= idx + 1 ? 'completed' : ''}`}>
+                          <div className="point-dot">{idx + 1}</div>
+                          <span className="point-label">{label}</span>
+                        </div>
+                      ))}
                     </div>
 
-                    {/* Quick Action Buttons */}
+                    {order.status === 'PENDING' && (
+                      <p className="order-meta-info">⏳ {tr("En attente de la réponse de l'artisan.", 'Waiting for the artisan to respond.')}</p>
+                    )}
+
                     <div className="order-actions-bar">
                       <button className="btn-whatsapp-action" onClick={() => openWhatsApp(order.whatsapp)}>
                         💬 WhatsApp Pro
                       </button>
 
-                      <button className="btn-cancel-action" onClick={() => handleCancelOrder(order.id)}>
-                        🚫 {isFrench ? 'Annuler' : 'Cancel'}
-                      </button>
+                      {['PENDING', 'ACCEPTED'].includes(order.status) && (
+                        <button className="btn-cancel-action" disabled={busy} onClick={() => handleCancelOrder(order)}>
+                          🚫 {tr('Annuler', 'Cancel')}
+                        </button>
+                      )}
 
-                      <button className="btn-validate-escrow-action" onClick={() => handleValidateWorkEnd(order.id)}>
-                        ✅ {isFrench ? 'Valider la Fin & Libérer Séquestre' : 'Release Escrow Payment'}
-                      </button>
+                      {['ACCEPTED', 'IN_PROGRESS'].includes(order.status) && !order.isPaid && (
+                        <button className="btn-primary-gold" disabled={busy} onClick={() => setPayingOrder(order)}>
+                          💳 {order.payment?.status === 'PENDING' ? tr('Confirmer le paiement', 'Confirm payment') : tr('Payer (Séquestre)', 'Pay into escrow')}
+                        </button>
+                      )}
+
+                      {order.status === 'IN_PROGRESS' && (
+                        <button className="btn-validate-escrow-action" disabled={busy} onClick={() => handleValidateWorkEnd(order)}>
+                          ✅ {order.escrowLocked ? tr('Valider la Fin & Libérer Séquestre', 'Confirm & Release Escrow') : tr('Valider la Fin des Travaux', 'Confirm Work Completed')}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -620,260 +468,223 @@ export default function ClientDashboard({
             </div>
           )}
 
-          {/* HISTORY ORDERS */}
           {ordersSubTab === 'HISTORY' && (
             <div className="orders-stack-list">
-              {historyOrders.map((hOrder) => (
-                <div key={hOrder.id} className="client-order-card history">
-                  <div className="order-header-row">
-                    <div>
-                      <span className="order-id-pill completed">✓ {hOrder.id} • {isFrench ? 'TERMINÉ' : 'COMPLETED'}</span>
-                      <h3 className="order-service-title">{hOrder.title}</h3>
-                      <p className="order-meta-info">
-                        🧑‍🔧 <strong>{hOrder.artisan}</strong> • 📍 {hOrder.location} • 🕒 {hOrder.date}
-                      </p>
+              {historyOrders.length === 0
+                ? renderEmpty('📜', tr('Aucun historique', 'No history yet'), tr('Vos prestations terminées apparaîtront ici.', 'Completed jobs will appear here.'))
+                : historyOrders.map((hOrder) => (
+                  <div key={hOrder.id} className="client-order-card history">
+                    <div className="order-header-row">
+                      <div>
+                        <span className={`order-id-pill ${hOrder.status === 'COMPLETED' ? 'completed' : ''}`}>
+                          {hOrder.status === 'COMPLETED' ? '✓' : '✕'} {hOrder.ref} • {hOrder.status === 'COMPLETED' ? tr('TERMINÉ', 'COMPLETED') : hOrder.status === 'REJECTED' ? tr('REFUSÉ', 'REJECTED') : tr('ANNULÉ', 'CANCELLED')}
+                        </span>
+                        <h3 className="order-service-title">{hOrder.title}</h3>
+                        <p className="order-meta-info">
+                          🧑‍🔧 <strong>{hOrder.artisan}</strong> • 📍 {hOrder.location || '—'} • 🕒 {formatDate(hOrder.date, lang)}
+                        </p>
+                      </div>
+                      {hOrder.amount > 0 && <span className="amount-num green">{formatFCFA(hOrder.amount)}</span>}
                     </div>
-                    <span className="amount-num green">{hOrder.amount.toLocaleString()} FCFA</span>
-                  </div>
 
-                  <div className="order-actions-bar">
-                    <button className="btn-outline-gold" onClick={() => handleDownloadInvoice(hOrder.id)}>
-                      📄 {isFrench ? 'Télécharger Facture PDF' : 'Download Invoice PDF'}
-                    </button>
-                    <button className="btn-outline" onClick={() => triggerToast(isFrench ? 'Formulaire d\'avis ouvert' : 'Review modal opened', '✍️')}>
-                      ⭐ {isFrench ? 'Laisser un Avis' : 'Write Review'}
-                    </button>
-                    <button className="btn-primary-gold" onClick={() => triggerToast(isFrench ? 'Nouvelle réservation initiée' : 'New booking started', '🔄')}>
-                      🔄 {isFrench ? 'Réserver à nouveau' : 'Rebook Artisan'}
-                    </button>
+                    <div className="order-actions-bar">
+                      <button className="btn-outline-gold" onClick={() => handleDownloadInvoice(hOrder)}>
+                        📄 {tr('Télécharger Facture PDF', 'Download Invoice PDF')}
+                      </button>
+                      {hOrder.status === 'COMPLETED' && (
+                        <button className="btn-outline" onClick={() => setReviewOrder(hOrder)}>
+                          ⭐ {tr('Laisser un Avis', 'Write Review')}
+                        </button>
+                      )}
+                      <button
+                        className="btn-primary-gold"
+                        onClick={() => {
+                          const match = artisans.find((a) => String(a.id) === String(hOrder.professionalId));
+                          setBookingTarget(match || { id: hOrder.professionalId, name: hOrder.artisan });
+                        }}
+                      >
+                        🔄 {tr('Réserver à nouveau', 'Rebook Artisan')}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           )}
         </div>
       )}
 
-      {/* ==========================================================================
-          TAB 3: MESSAGERIE & CONTACTS
-          ========================================================================== */}
-      {activeTab === 'MESSAGES' && (
-        <div className="tab-content-panel">
-          <div className="section-title-wrap">
-            <h2>💬 Messagerie & Espace de Discussion Artisans</h2>
-            <p>Discutez en direct et envoyez vos photos/vidéos du problème à résoudre</p>
-          </div>
-
-          <div className="messages-chat-list">
-            <div className="chat-thread-card" onClick={() => openWhatsApp('237675421099')}>
-              <img src="https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=300&q=80" alt="Emmanuel Ngu" className="chat-avatar" />
-              <div className="chat-thread-body">
-                <div className="chat-header">
-                  <strong>Emmanuel Ngu (Master Électricien)</strong>
-                  <span className="chat-time">14:15</span>
-                </div>
-                <p className="chat-last-msg">"Je suis en route vers Bastos avec le matériel, arrivée estimée dans 15 min."</p>
-              </div>
-              <button className="btn-whatsapp-card" style={{ marginLeft: 'auto' }}>💬 WhatsApp</button>
-            </div>
-
-            <div className="chat-thread-card" onClick={() => openWhatsApp('237699887766')}>
-              <img src="https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=300&q=80" alt="Derreck Plomb" className="chat-avatar" />
-              <div className="chat-thread-body">
-                <div className="chat-header">
-                  <strong>Derreck Plomb (Plomberie Sanitaire)</strong>
-                  <span className="chat-time">Hier</span>
-                </div>
-                <p className="chat-last-msg">"Devis accepté pour la rénovation de la tuyauterie de douche."</p>
-              </div>
-              <button className="btn-whatsapp-card" style={{ marginLeft: 'auto' }}>💬 WhatsApp</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ==========================================================================
-          TAB 4: FAVORIS & ARTISANS MÉMORISÉS (BOOKMARKS)
-          ========================================================================== */}
+      {/* TAB 3: BOOKMARKS */}
       {activeTab === 'BOOKMARKS' && (
         <div className="tab-content-panel">
           <div className="section-title-wrap">
-            <h2>⭐ Vos Artisans Mémorisés en Favoris</h2>
-            <p>Accès rapide pour vos interventions d'urgence à Douala & Yaoundé</p>
+            <h2>⭐ {tr('Vos Artisans Favoris', 'Your Favourite Artisans')}</h2>
+            <p>{tr("Accès rapide pour vos interventions d'urgence", 'Quick access for urgent jobs')}</p>
           </div>
-
-          <div className="artisans-grid">
-            {bookmarks.map((b) => (
-              <div
-                key={b.id}
-                className="artisan-card-luxury clickable-profile-card"
-                onClick={() => onSelectArtisan && onSelectArtisan(b)}
-                title={isFrench ? `Consulter le profil de ${b.name}` : `View ${b.name}'s profile`}
-              >
-                <div className="artisan-card-img-wrap">
-                  <img src={b.image} alt={b.name} />
-                  <span className="artisan-badge-tag">FAVORI ✓</span>
-                  <div className="card-hover-profile-hint">
-                    <span>👁️ {isFrench ? 'Voir Profil' : 'View Profile'}</span>
-                  </div>
-                </div>
-                <div className="artisan-card-body">
-                  <h3 className="artisan-card-name">{b.name}</h3>
-                  <p className="artisan-card-prof">{b.profession}</p>
-                  <p className="artisan-card-location">📍 {b.city}</p>
-                  <div className="artisan-card-actions">
-                    <button
-                      type="button"
-                      className="btn-view-profile-card"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (onSelectArtisan) onSelectArtisan(b);
-                      }}
-                    >
-                      👁️ {isFrench ? 'Consulter le Profil' : 'View Profile'}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-whatsapp-card"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openWhatsApp(b.whatsapp);
-                      }}
-                    >
-                      💬 WhatsApp
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-cancel-action"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveBookmark(b.id);
-                      }}
-                    >
-                      🗑️ Retirer
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          {loading.bookmarks
+            ? renderEmpty('⏳', tr('Chargement…', 'Loading…'), '')
+            : bookmarks.length === 0
+            ? renderEmpty('⭐', tr('Aucun favori', 'No bookmarks yet'), tr("Ajoutez des artisans en favoris depuis leur profil.", 'Bookmark artisans from their profile page.'))
+            : <div className="artisans-grid">{bookmarks.map((b) => renderArtisanCard(b, { favorite: true }))}</div>}
         </div>
       )}
 
-      {/* ==========================================================================
-          TAB 5: PAIEMENTS & SÉCURITÉ (GARANTIE SÉQUESTRE)
-          ========================================================================== */}
+      {/* TAB 4: PAYMENTS */}
       {activeTab === 'PAYMENTS' && (
         <div className="tab-content-panel">
           <div className="payment-security-banner">
             <div>
-              <h2>🔒 Garantie Séquestre Skillora FCFA</h2>
-              <p>Vos fonds sont conservés en toute sécurité sous séquestre jusqu'à la fin complète et validée de vos travaux.</p>
-            </div>
-            <button className="btn-primary-gold" onClick={onOpenWallet}>+ Recharger Portefeuille FCFA</button>
-          </div>
-
-          <h3 style={{ color: '#fff', margin: '1.5rem 0 1rem' }}>💳 Moyens de Paiement Enregistrés</h3>
-          <div className="payment-methods-grid">
-            <div className="payment-method-card mtn">
-              <span className="pm-icon">🟡</span>
-              <div>
-                <strong>MTN Mobile Money (*126#)</strong>
-                <p>+237 670 00 00 00 (Compte Principal)</p>
-              </div>
-              <span className="pm-badge">PAR DÉFAUT</span>
-            </div>
-
-            <div className="payment-method-card orange">
-              <span className="pm-icon">🟠</span>
-              <div>
-                <strong>Orange Money (#150#)</strong>
-                <p>+237 699 11 22 33</p>
-              </div>
+              <h2>🔒 {tr('Garantie Séquestre Skillora', 'Skillora Escrow Guarantee')}</h2>
+              <p>
+                {tr(
+                  "Vos fonds sont conservés en séquestre et ne sont versés à l'artisan qu'après votre validation de fin des travaux. Skillora prélève 2% de frais de service.",
+                  'Your money is held in escrow and only paid to the artisan once you confirm the job is done. Skillora keeps a 2% service fee.'
+                )}
+              </p>
             </div>
           </div>
 
-          <h3 style={{ color: '#fff', margin: '2rem 0 1rem' }}>📜 Historique des Transactions & Factures</h3>
-          <table className="transactions-table">
-            <thead>
-              <tr>
-                <th>Réf Transaction</th>
-                <th>Type</th>
-                <th>Montant</th>
-                <th>Mode</th>
-                <th>Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>#TX-9041</td>
-                <td>Séquestre Verrouillé (Électricité)</td>
-                <td>45 000 FCFA</td>
-                <td>MTN MoMo</td>
-                <td><span className="t-status locked">🔒 Bloqué Séquestre</span></td>
-              </tr>
-              <tr>
-                <td>#TX-8812</td>
-                <td>Séquestre Verrouillé (Plomberie)</td>
-                <td>30 000 FCFA</td>
-                <td>Orange Money</td>
-                <td><span className="t-status locked">🔒 Bloqué Séquestre</span></td>
-              </tr>
-              <tr>
-                <td>#TX-7201</td>
-                <td>Libération Séquestre (Clim)</td>
-                <td>25 000 FCFA</td>
-                <td>MTN MoMo</td>
-                <td><span className="t-status success">✓ Payé à l'artisan</span></td>
-              </tr>
-            </tbody>
-          </table>
+          <h3 style={{ color: 'var(--text-white)', margin: '2rem 0 1rem' }}>📜 {tr('Historique des Transactions', 'Transaction History')}</h3>
+          {payments.length === 0 ? (
+            renderEmpty('💳', tr('Aucune transaction', 'No transactions yet'), tr('Vos paiements Mobile Money apparaîtront ici.', 'Your Mobile Money payments will appear here.'))
+          ) : (
+            <table className="transactions-table">
+              <thead>
+                <tr>
+                  <th>{tr('Réf', 'Ref')}</th>
+                  <th>{tr('Prestation', 'Job')}</th>
+                  <th>{tr('Montant', 'Amount')}</th>
+                  <th>{tr('Mode', 'Method')}</th>
+                  <th>{tr('Statut', 'Status')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((p) => {
+                  const label = PAYMENT_STATUS_LABELS[p.status] || { fr: p.status, en: p.status, cls: '' };
+                  return (
+                    <tr key={p._id}>
+                      <td>{shortRef(p._id)}</td>
+                      <td>{p.serviceRequestId?.description || '—'}</td>
+                      <td>{formatFCFA(p.amount)}</td>
+                      <td>{p.paymentMethod === 'MTN' ? 'MTN MoMo' : p.paymentMethod === 'ORANGE' ? 'Orange Money' : 'Mobile Money'}</td>
+                      <td><span className={`t-status ${label.cls}`}>{isFrench ? label.fr : label.en}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
 
-      {/* ==========================================================================
-          TAB 6: PARAMÈTRES DU COMPTE CLIENT
-          ========================================================================== */}
+      {/* TAB 5: SETTINGS */}
       {activeTab === 'SETTINGS' && (
-        <div className="tab-content-panel">
-          <div className="section-title-wrap">
-            <h2>⚙️ Paramètres du Compte & Préférences Client</h2>
-            <p>Gérez vos coordonnées, adresse principale et options de notification</p>
-          </div>
-
-          <form className="client-settings-form" onSubmit={(e) => { e.preventDefault(); triggerToast('Modifications enregistrées !', '✓'); }}>
-            <div className="form-two-col">
-              <div className="field">
-                <label className="field-label">Nom Complet</label>
-                <input type="text" className="input-field" defaultValue={currentUser?.name || 'Valerie Mbida'} required />
-              </div>
-              <div className="field">
-                <label className="field-label">Téléphone WhatsApp (+237)</label>
-                <input type="tel" className="input-field" defaultValue={currentUser?.phone || '+237 670 00 00 00'} required />
-              </div>
-            </div>
-
-            <div className="field">
-              <label className="field-label">Adresse Principale d'Intervention</label>
-              <input type="text" className="input-field" defaultValue="Yaoundé, Quartier Bastos (Avenue des Ambassades)" required />
-            </div>
-
-            <h3 style={{ color: '#fff', margin: '1.5rem 0 0.75rem' }}>🔔 Préférences de Notifications</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-cream)' }}>
-                <input type="checkbox" defaultChecked /> Notifications WhatsApp (Suivi des travaux en temps réel)
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-cream)' }}>
-                <input type="checkbox" defaultChecked /> SMS de confirmation de Séquestre Mobile Money
-              </label>
-            </div>
-
-            <button type="submit" className="btn-primary-gold" style={{ marginTop: '1.75rem' }}>
-              Enregistrer les Modifications ✓
-            </button>
-          </form>
-        </div>
+        <ClientSettingsForm currentUser={currentUser} setCurrentUser={setCurrentUser} triggerToast={triggerToast} tr={tr} />
       )}
+
+      {bookingTarget && (
+        <BookingDialog
+          artisan={bookingTarget}
+          defaultLocation={currentUser?.city || ''}
+          tr={tr}
+          onClose={() => setBookingTarget(null)}
+          onBooked={() => {
+            setBookingTarget(null);
+            loadOrders();
+            setActiveTab('ORDERS');
+            setOrdersSubTab('ACTIVE');
+          }}
+          triggerToast={triggerToast}
+        />
+      )}
+
+      {payingOrder && (
+        <PaymentDialog
+          order={payingOrder}
+          defaultPhone={currentUser?.phone || ''}
+          tr={tr}
+          onClose={() => setPayingOrder(null)}
+          onDone={() => { setPayingOrder(null); loadOrders(); }}
+          triggerToast={triggerToast}
+        />
+      )}
+
+      {reviewOrder && (
+        <ReviewDialog
+          order={reviewOrder}
+          tr={tr}
+          onClose={() => setReviewOrder(null)}
+          onDone={() => { setReviewOrder(null); loadArtisans(); }}
+          triggerToast={triggerToast}
+        />
+      )}
+    </div>
+  );
+}
+
+function ClientSettingsForm({ currentUser, setCurrentUser, triggerToast, tr }) {
+  const [name, setName] = useState(currentUser?.name || '');
+  const [phone, setPhone] = useState(currentUser?.phone || '');
+  const [location, setLocation] = useState(currentUser?.city || '');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!currentUser?.id) return;
+    const [firstName, ...rest] = name.trim().split(/\s+/);
+    setSaving(true);
+    try {
+      const res = await api(`/users/${currentUser.id}`, {
+        method: 'PUT',
+        body: { firstName, lastName: rest.join(' ') || currentUser.lastName, phone, location },
+      });
+      const u = res.data;
+      setCurrentUser?.((prev) => ({
+        ...prev,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        name: `${u.firstName} ${u.lastName}`.trim(),
+        phone: u.phone || '',
+        city: u.location || '',
+        location: u.location || '',
+      }));
+      triggerToast(tr('Modifications enregistrées !', 'Changes saved!'), '✓');
+    } catch (err) {
+      triggerToast(err.message, '⚠️');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="tab-content-panel">
+      <div className="section-title-wrap">
+        <h2>⚙️ {tr('Paramètres du Compte', 'Account Settings')}</h2>
+        <p>{tr('Gérez vos coordonnées et votre adresse principale', 'Manage your contact details and main address')}</p>
+      </div>
+
+      <form className="client-settings-form" onSubmit={submit}>
+        <div className="form-two-col">
+          <div className="field">
+            <label className="field-label">{tr('Nom Complet', 'Full Name')}</label>
+            <input type="text" className="input-field" value={name} onChange={(e) => setName(e.target.value)} required />
+          </div>
+          <div className="field">
+            <label className="field-label">{tr('Téléphone WhatsApp (+237)', 'WhatsApp Phone (+237)')}</label>
+            <input type="tel" className="input-field" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="field">
+          <label className="field-label">{tr("Adresse Principale d'Intervention", 'Main Service Address')}</label>
+          <input type="text" className="input-field" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Yaoundé, Bastos" />
+        </div>
+
+        <p className="order-meta-info">✉️ {currentUser?.email}</p>
+
+        <button type="submit" className="btn-primary-gold" disabled={saving} style={{ marginTop: '1.75rem' }}>
+          {saving ? tr('Enregistrement…', 'Saving…') : tr('Enregistrer les Modifications ✓', 'Save Changes ✓')}
+        </button>
+      </form>
     </div>
   );
 }

@@ -34,7 +34,16 @@ const getUserById = async (req, res, next) => {
       });
     }
 
-    const uObj = user.toObject();
+    const canSeePrivate = req.user.role === "ADMIN" || req.user._id.toString() === user._id.toString();
+    const uObj = user.toJSON();
+    if (!canSeePrivate) {
+      // Other users only get the public profile
+      delete uObj.email;
+      delete uObj.phone;
+      delete uObj.latitude;
+      delete uObj.longitude;
+      delete uObj.isActive;
+    }
     if (user.role === "PROFESSIONAL") {
       uObj.professionalProfile = await Professional.findOne({ userId: user._id });
     }
@@ -128,9 +137,60 @@ const deleteUser = async (req, res, next) => {
   }
 };
 
+const updateUserLocation = async (req, res, next) => {
+  try {
+    const { latitude, longitude, location } = req.body;
+
+    if (latitude === undefined || longitude === undefined || latitude === null || longitude === null) {
+      return res.status(400).json({
+        success: false,
+        message: "Latitude and longitude are required.",
+      });
+    }
+
+    const numLat = Number(latitude);
+    const numLon = Number(longitude);
+
+    if (isNaN(numLat) || isNaN(numLon) || numLat < -90 || numLat > 90 || numLon < -180 || numLon > 180) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid latitude or longitude coordinates.",
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    user.latitude = numLat;
+    user.longitude = numLon;
+    if (location) {
+      user.location = location.trim();
+    }
+
+    await user.save();
+
+    const uObj = user.toObject();
+    delete uObj.password;
+
+    return res.json({
+      success: true,
+      message: "User location updated successfully.",
+      data: uObj,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getAllUsers,
   getUserById,
   updateUser,
+  updateUserLocation,
   deleteUser,
 };

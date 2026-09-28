@@ -118,18 +118,33 @@ Follow this logical order to test all core functionality:
 
 ---
 
-### Step 5: Test AI Features (Gemini)
+### Step 5: Test Geolocation & Nearby Artisan Search
+- **Update Client Location (`POST /api/users/location`)**:
+  - Request Body: `{ "latitude": 3.834, "longitude": 11.488 }`
+  - Saves client GPS coordinates.
+- **Update Artisan Location & Service Area (`PUT /api/professionals/location`)**:
+  - Request Body: `{ "latitude": 3.888, "longitude": 11.517, "serviceArea": "Yaoundé & Bastos (15 km radius)", "locationVisibility": "APPROXIMATE" }`
+  - Configures artisan service area and privacy visibility.
+- **Find Nearby Artisans (`GET /api/professionals/nearby`)**:
+  - Query parameters: `?latitude=3.888&longitude=11.517&maxDistance=10&sortBy=distance`
+  - Calculates Haversine distance for each artisan and filters by maximum distance (e.g. 10 km).
+  - Returns calculated `distanceKm` and formatted `distanceText` (e.g., `"2.4 km away"`).
+
+---
+
+### Step 6: Test AI Features (Gemini & Geolocation)
 - Open: **`10 - AI Services`** ➔ **`1. AI Chat Assistant`**
   - Sends a troubleshooting prompt (e.g., *"mon disjoncteur saute dès que j'allume le chauffe-eau"*).
   - Click **Send** to see the AI diagnostic and artisan recommendation.
 - Open: **`10 - AI Services`** ➔ **`2. AI Match Recommendations`**
-  - Click **Send** to test weighted matching algorithm.
+  - Sends query with `latitude`, `longitude`, and `maxDistance`.
+  - Click **Send** to test weighted matching algorithm including proximity factor (15% weight).
 - Open: **`10 - AI Services`** ➔ **`3. Generate Technical Questions`**
   - Generates custom quiz questions for trade assessments.
 
 ---
 
-### Step 6: Test Admin Dashboard APIs
+### Step 7: Test Admin Dashboard APIs
 - Open: **`12 - Admin Panel`** ➔ **`1. Admin Login`**
   - Body has: `admin@interlink.com` / `Password123!`.
   - Click **Send**. The script automatically saves `{{adminToken}}`.
@@ -139,6 +154,24 @@ Follow this logical order to test all core functionality:
   - Click **Send** to view pending artisan applications.
 - Open: **`12 - Admin Panel`** ➔ **`8. Admin Process Verification (Approve)`**
   - Approves the selected artisan.
+
+---
+
+### Step 8: DigiPay Mobile Money Payments (2% Fee to Orange 690191238)
+- **`GET /api/payments/estimate?amount=50000`**: Calculates 2% platform fee (1,000 FCFA -> Orange `690191238`) and 98% artisan payout (49,000 FCFA).
+- **`POST /api/payments/initiate`**: Initiates pay-in via DigiPay Node.js SDK (`digipay-sdk`).
+  ```json
+  {
+    "serviceRequestId": "65f1a2b3c4d5e6f7a8b9c0d1",
+    "amount": 50000,
+    "customerPhone": "237699000000",
+    "customerEmail": "client@skillora.cm",
+    "artisanPhone": "237670000000"
+  }
+  ```
+- **`POST /api/payments/confirm`**: Verifies transaction status and triggers 2% payout to Orange `690191238` & 98% payout to Artisan.
+- **`GET /api/payments/history`**: Returns payment history with breakdown.
+- **`GET /api/payments/balance`**: Queries DigiPay SDK account balance.
 
 ---
 

@@ -15,9 +15,12 @@ export const translations = {
     whatsappSupport: "WhatsApp",
     adminPortal: "Super Admin Portal",
     
-    // Role selection
+    // Role selection & Hero
     roleHeroTitle: "Your Gateway to Verified Expertise",
     roleHeroSubtitle: "Connecting demanding clients with certified individual artisans and professional artisan groups across Cameroon.",
+    searchPlaceholder: "What service are you looking for? (e.g. Plumber, Electrician, Carpenter...)",
+    allCities: "All Cities",
+    searchBtn: "Search Artisans 🔍",
     forClients: "For Clients",
     clientTitle: "Hire Top-Tier Artisans",
     clientDesc: "Find background-checked, AI-verified professionals for your residential, commercial, and technical projects.",
@@ -26,6 +29,18 @@ export const translations = {
     clientFeat3: "100% Escrow protected payments in Franc CFA (FCFA)",
     continueClient: "Continue as Client →",
     
+    // Social Proof
+    statArtisans: "500+ Qualified Artisans",
+    statArtisansSub: "AI & Field Verified in Cameroon",
+    statProjects: "2,500+ Completed Projects",
+    statProjectsSub: "Residential & Commercial Missions",
+    statRating: "4.9 / 5 Average Rating",
+    statRatingSub: "From 1,800+ Customer Reviews",
+    badgeEscrow: "100% Escrow Payment Protection (MTN & Orange MoMo in FCFA)",
+    badgeAI: "13-Point AI Verification & Identity Check",
+    badgeSpeed: "24h Guaranteed Response in Douala & Yaoundé",
+    testimonialsTitle: "Trusted by Clients & Enterprise Collectives",
+    
     forArtisans: "For Artisans & Collectives",
     artisanTitle: "Offer Your Skills & Build Your Business",
     artisanDesc: "Join as a Single Artisan or a Grouped Artisan (Workshop/Agency) to access high-value contracts and progressive certification.",
@@ -33,6 +48,7 @@ export const translations = {
     artisanFeat2: "Instant FCFA payouts via MTN MoMo & Orange Money",
     artisanFeat3: "13-stage AI trust certification badges for higher visibility",
     continueArtisan: "Join as Professional →",
+    adminSpaceFooter: "Admin Portal",
 
     // Auth Common
     signIn: "Sign In",
@@ -112,9 +128,12 @@ export const translations = {
     whatsappSupport: "WhatsApp",
     adminPortal: "Portail Super Administrateur",
     
-    // Role selection
+    // Role selection & Hero
     roleHeroTitle: "Votre Passerelle vers l'Expertise Certifiée",
     roleHeroSubtitle: "Mise en relation directe de clients exigeants avec des artisans individuels et des groupes professionnels certifiés au Cameroun.",
+    searchPlaceholder: "Quel service recherchez-vous ? (ex: Plombier, Électricien, Menuisier...)",
+    allCities: "Toutes les villes",
+    searchBtn: "Rechercher un Artisan 🔍",
     forClients: "Pour les Clients",
     clientTitle: "Trouvez des Artisans d'Élite",
     clientDesc: "Trouvez des professionnels vérifiés par IA et contrôlés pour tous vos projets résidentiels, commerciaux et techniques.",
@@ -123,6 +142,18 @@ export const translations = {
     clientFeat3: "Paiements 100% sécurisés par séquestre en Franc CFA (FCFA)",
     continueClient: "Continuer comme Client →",
     
+    // Social Proof
+    statArtisans: "500+ Artisans Qualifiés",
+    statArtisansSub: "Vérifiés par IA & Enquête Terrain",
+    statProjects: "2,500+ Projets Réussis",
+    statProjectsSub: "Missions Résidentielles & Commerciales",
+    statRating: "4.9 / 5 Note Moyenne",
+    statRatingSub: "Basée sur +1,800 Avis Clients Vérifiés",
+    badgeEscrow: "Paiements Sécurisés par Séquestre FCFA (MTN & Orange MoMo)",
+    badgeAI: "Certification IA & Contrôle d'Identité en 13 Étapes",
+    badgeSpeed: "Intervention Garantie sous 24h à Douala et Yaoundé",
+    testimonialsTitle: "La Confiance des Clients & Collectifs d'Entreprises",
+    
     forArtisans: "Pour Artisans & Collectifs",
     artisanTitle: "Proposez vos Compétences et Développez votre Activité",
     artisanDesc: "Inscrivez-vous en tant qu'Artisan Individuel ou Artisan Groupé (Atelier/Entreprise) pour accéder aux meilleurs chantiers.",
@@ -130,6 +161,7 @@ export const translations = {
     artisanFeat2: "Paiements instantanés en FCFA via MTN MoMo et Orange Money",
     artisanFeat3: "Certification en 13 étapes pour booster votre visibilité",
     continueArtisan: "Rejoindre comme Professionnel →",
+    adminSpaceFooter: "Espace Admin",
 
     // Auth Common
     signIn: "Connexion",

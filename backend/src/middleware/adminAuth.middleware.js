@@ -1,5 +1,5 @@
-const jwt = require("jsonwebtoken");
 const { User } = require("../models");
+const { verifyToken } = require("../utils/jwt.util");
 
 const authenticateAdmin = async (req, res, next) => {
   try {
@@ -12,10 +12,7 @@ const authenticateAdmin = async (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "default_jwt_secret"
-    );
+    const decoded = verifyToken(token);
 
     if (decoded.role !== "ADMIN") {
       return res.status(403).json({

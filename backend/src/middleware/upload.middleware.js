@@ -8,17 +8,24 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-// Max file size: 10MB
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+// Max file sizes
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // images: 10MB
+const MAX_VIDEO_SIZE = 60 * 1024 * 1024; // 60-second presentation video: 60MB
 
-// Allowed image MIME types and extensions
+// Allowed image MIME types and extensions.
+// SVG is deliberately excluded: it can embed scripts and would be served from our own origin.
 const ALLOWED_MIME_TYPES = {
   "image/jpeg": ".jpg",
   "image/jpg": ".jpg",
   "image/png": ".png",
   "image/webp": ".webp",
   "image/gif": ".gif",
-  "image/svg+xml": ".svg",
+};
+
+const ALLOWED_VIDEO_TYPES = {
+  "video/webm": ".webm",
+  "video/mp4": ".mp4",
+  "video/quicktime": ".mov",
 };
 
 /**
@@ -81,7 +88,7 @@ function parseMultipartBuffer(buffer, boundary) {
 /**
  * Express middleware for single and multiple image uploads
  */
-const uploadImageMiddleware = (req, res, next) => {
+const createUploadMiddleware = ({ allowedTypes, maxSize, prefix, typesLabel }) => (req, res, next) => {
   const contentType = req.headers["content-type"] || "";
 
   // 1. Check if request is base64 JSON upload
@@ -99,22 +106,22 @@ const uploadImageMiddleware = (req, res, next) => {
         buffer = Buffer.from(base64String, "base64");
       }
 
-      if (!ALLOWED_MIME_TYPES[mimeType]) {
+      if (!allowedTypes[mimeType]) {
         return res.status(400).json({
           success: false,
-          message: "Format d'image non valide. Formats acceptés : JPEG, PNG, WEBP, GIF, SVG.",
+          message: `Format de fichier non valide. Formats acceptés : ${typesLabel}.`,
         });
       }
 
-      if (buffer.length > MAX_FILE_SIZE) {
+      if (buffer.length > maxSize) {
         return res.status(400).json({
           success: false,
-          message: "La taille de l'image dépasse la limite autorisée de 10 Mo.",
+          message: `Le fichier dépasse la limite autorisée de ${Math.round(maxSize / 1024 / 1024)} Mo.`,
         });
       }
 
-      const ext = ALLOWED_MIME_TYPES[mimeType] || ".jpg";
-      const filename = `img_${Date.now()}_${crypto.randomUUID().slice(0, 8)}${ext}`;
+      const ext = allowedTypes[mimeType] || ".jpg";
+      const filename = `${prefix}_${Date.now()}_${crypto.randomUUID().slice(0, 8)}${ext}`;
       const filepath = path.join(UPLOAD_DIR, filename);
 
       fs.writeFileSync(filepath, buffer);
@@ -149,17 +156,25 @@ const uploadImageMiddleware = (req, res, next) => {
 
     const chunks = [];
     let totalSize = 0;
+    let tooLarge = false;
 
     req.on("data", (chunk) => {
+      if (tooLarge) return;
       totalSize += chunk.length;
-      if (totalSize > MAX_FILE_SIZE + 1024 * 1024) {
-        req.destroy();
+      if (totalSize > maxSize + 1024 * 1024) {
+        tooLarge = true;
+        chunks.length = 0;
+        res.status(413).json({
+          success: false,
+          message: `Le fichier dépasse la taille maximale autorisée de ${Math.round(maxSize / 1024 / 1024)} Mo.`,
+        });
       } else {
         chunks.push(chunk);
       }
     });
 
     req.on("end", () => {
+      if (tooLarge) return;
       try {
         const fullBuffer = Buffer.concat(chunks);
         const parts = parseMultipartBuffer(fullBuffer, boundary);
@@ -169,23 +184,24 @@ const uploadImageMiddleware = (req, res, next) => {
 
         for (const part of parts) {
           if (part.filename) {
-            const mime = part.contentType || "image/jpeg";
-            if (!ALLOWED_MIME_TYPES[mime]) {
+            // Browsers may append codec info, e.g. "video/webm;codecs=vp9"
+            const mime = (part.contentType || "").split(";")[0].trim();
+            if (!allowedTypes[mime]) {
               return res.status(400).json({
                 success: false,
-                message: `Le fichier ${part.filename} n'est pas une image valide. Formats autorisés : JPEG, PNG, WEBP, GIF, SVG.`,
+                message: `Le fichier ${part.filename} n'est pas valide. Formats autorisés : ${typesLabel}.`,
               });
             }
 
-            if (part.data.length > MAX_FILE_SIZE) {
+            if (part.data.length > maxSize) {
               return res.status(400).json({
                 success: false,
-                message: `Le fichier ${part.filename} dépasse la taille maximale autorisée de 10 Mo.`,
+                message: `Le fichier ${part.filename} dépasse la taille maximale autorisée de ${Math.round(maxSize / 1024 / 1024)} Mo.`,
               });
             }
 
-            const ext = ALLOWED_MIME_TYPES[mime] || path.extname(part.filename) || ".jpg";
-            const filename = `img_${Date.now()}_${crypto.randomUUID().slice(0, 8)}${ext}`;
+            const ext = allowedTypes[mime];
+            const filename = `${prefix}_${Date.now()}_${crypto.randomUUID().slice(0, 8)}${ext}`;
             const filepath = path.join(UPLOAD_DIR, filename);
 
             fs.writeFileSync(filepath, part.data);
@@ -234,9 +250,26 @@ const uploadImageMiddleware = (req, res, next) => {
   return next();
 };
 
+const uploadImageMiddleware = createUploadMiddleware({
+  allowedTypes: ALLOWED_MIME_TYPES,
+  maxSize: MAX_FILE_SIZE,
+  prefix: "img",
+  typesLabel: "JPEG, PNG, WEBP, GIF",
+});
+
+const uploadVideoMiddleware = createUploadMiddleware({
+  allowedTypes: ALLOWED_VIDEO_TYPES,
+  maxSize: MAX_VIDEO_SIZE,
+  prefix: "vid",
+  typesLabel: "WEBM, MP4, MOV",
+});
+
 module.exports = {
   uploadImageMiddleware,
+  uploadVideoMiddleware,
   UPLOAD_DIR,
   ALLOWED_MIME_TYPES,
+  ALLOWED_VIDEO_TYPES,
   MAX_FILE_SIZE,
+  MAX_VIDEO_SIZE,
 };

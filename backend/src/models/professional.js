@@ -112,6 +112,13 @@ const professionalSchema = new mongoose.Schema(
       default: 0,
     },
 
+    // Track-record level, computed by services/verification.service.js
+    trustLevel: {
+      type: String,
+      enum: ["NEW", "ESTABLISHED", "TRUSTED", "EXPERT"],
+      default: "NEW",
+    },
+
     rating: {
       type: Number,
       default: 0,
@@ -122,9 +129,10 @@ const professionalSchema = new mongoose.Schema(
       default: 0,
     },
 
+    // FCFA earned from released escrow payments
     walletBalance: {
       type: Number,
-      default: 350000, // FCFA
+      default: 0,
     },
 
     availability: {
@@ -137,6 +145,27 @@ const professionalSchema = new mongoose.Schema(
         type: String,
         default: "Mon-Fri 8:00 - 18:00",
       },
+    },
+
+    latitude: {
+      type: Number,
+      default: null,
+    },
+
+    longitude: {
+      type: Number,
+      default: null,
+    },
+
+    serviceArea: {
+      type: String,
+      default: null,
+    },
+
+    locationVisibility: {
+      type: String,
+      enum: ["EXACT", "APPROXIMATE", "CITY_ONLY"],
+      default: "APPROXIMATE",
     },
   },
   {

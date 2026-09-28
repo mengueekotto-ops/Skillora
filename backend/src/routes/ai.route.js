@@ -10,7 +10,11 @@ const {
   handleChat,
 } = require("../controllers/ai.controller");
 
-// Section 16 & 17 of Specification: POST /api/ai/evaluate-answer
+const authenticateToken = require("../middleware/auth.middleware");
+
+// AI calls cost money per request, so every endpoint requires a logged-in user
+router.use(authenticateToken);
+
 router.post("/evaluate-answer", evaluateAnswer);
 router.post("/generate-questions", generateQuestions);
 router.post("/extract-intent", extractIntent);

@@ -31,18 +31,43 @@ const createReview = async (req, res, next) => {
       reliabilityRating = 5,
     } = req.body;
 
-    if (!professionalId || rating === undefined) {
+    const numericRating = Number(rating);
+    if (!professionalId || !Number.isFinite(numericRating) || numericRating < 1 || numericRating > 5) {
       return res.status(400).json({
         success: false,
-        message: "Professional ID and overall rating are required.",
+        message: "Professional ID and an overall rating between 1 and 5 are required.",
+      });
+    }
+
+    // A review must be backed by a completed job between this customer and this artisan,
+    // and each job can be reviewed only once. This keeps ratings honest.
+    const reviewedRequestIds = (
+      await Review.find({ customerId: req.user._id, professionalId }).select("serviceRequestId")
+    )
+      .map((r) => r.serviceRequestId)
+      .filter(Boolean);
+
+    const requestFilter = {
+      customerId: req.user._id,
+      professionalId,
+      status: "COMPLETED",
+      _id: { $nin: reviewedRequestIds },
+    };
+    if (serviceRequestId) requestFilter._id = { $eq: serviceRequestId, $nin: reviewedRequestIds };
+
+    const completedRequest = await ServiceRequest.findOne(requestFilter).sort({ updatedAt: -1 });
+    if (!completedRequest) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only review an artisan after a completed job, once per job.",
       });
     }
 
     const review = await Review.create({
       customerId: req.user._id,
       professionalId,
-      serviceRequestId: serviceRequestId || null,
-      rating: Number(rating),
+      serviceRequestId: completedRequest._id,
+      rating: numericRating,
       comment,
       qualityRating: Number(qualityRating),
       professionalismRating: Number(professionalismRating),
@@ -168,6 +193,14 @@ const deleteReview = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: "Review not found.",
+      });
+    }
+
+    const isOwner = req.user._id.toString() === review.customerId.toString();
+    if (!isOwner && req.user.role !== "ADMIN") {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden. You can only delete your own reviews.",
       });
     }
 

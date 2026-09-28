@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { api } from '../api';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // VerificationQuiz — Skillora Automated Artisan Certification Quiz
@@ -11,14 +12,19 @@ const TOTAL_QUESTIONS = 10;
 
 export default function VerificationQuiz({
   artisan,        // { id, _id, professionalId, profession, name }
+  profession: propProfession,
   lang = 'fr',
   triggerToast,
   onClose,        // called to close the modal
   onVerified,     // called with result data when badge is awarded
+  onComplete,     // called when passing quiz to advance onboarding
+  onResult,       // called with every graded result (pass or fail)
+  isModal = false,
 }) {
   const isFr = lang === 'fr';
-  const artisanId = artisan?.professionalId || artisan?.id || artisan?._id;
-  const profession = artisan?.profession || (isFr ? 'Artisan Général' : 'General Artisan');
+  // Without an id the server uses the logged-in artisan's own profile
+  const artisanId = artisan?.professionalId || artisan?.id || artisan?._id || null;
+  const profession = propProfession || artisan?.profession || (isFr ? 'Artisan Général' : 'General Artisan');
 
   // ── Screen FSM ──────────────────────────────────────────────────────────────
   const [screen, setScreen] = useState('intro'); // intro | loading | quiz | result | timeout
@@ -45,7 +51,7 @@ export default function VerificationQuiz({
     ? ['🔍 Analyse de votre profession…', '🧠 Génération IA en cours…', '📋 Calibrage niveau O-Level…', '✅ Préparation de l\'examen…']
     : ['🔍 Analyzing your profession…', '🧠 Generating AI questions…', '📋 Calibrating O-Level difficulty…', '✅ Preparing your assessment…'];
 
-  // ── Start Quiz ──────────────────────────────────────────────────────────────
+  // ── Start Quiz (questions and grading always come from the server) ─────────
   const startQuiz = useCallback(async () => {
     timedOutRef.current = false;
     setScreen('loading');
@@ -54,35 +60,33 @@ export default function VerificationQuiz({
     const msgInterval = setInterval(() => {
       msgIdx = (msgIdx + 1) % loadingMsgs.length;
       setLoadingMsg(loadingMsgs[msgIdx]);
-    }, 1300);
+    }, 900);
 
     try {
-      const res = await fetch('/api/verifications/quiz/start', {
+      const data = await api('/verifications/quiz/start', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ artisanId, lang }),
+        body: { artisanId: artisanId || undefined, lang },
       });
-      const data = await res.json();
-      clearInterval(msgInterval);
-
-      if (res.ok && data.success) {
-        setQuestions(data.data.questions);
-        setSessionToken(data.data.sessionToken);
-        setCurrentIdx(0);
-        setAnswers([]);
-        setSelectedOption(null);
-        setTimeLeft(TIME_PER_QUESTION);
-        setScreen('quiz');
-      } else {
-        triggerToast?.(data.message || (isFr ? 'Erreur de génération du quiz' : 'Failed to generate quiz'), '❌');
-        setScreen('intro');
+      if (!Array.isArray(data.data?.questions) || data.data.questions.length === 0) {
+        throw new Error(isFr ? 'Questions invalides reçues.' : 'Invalid questions received.');
       }
-    } catch {
-      clearInterval(msgInterval);
-      triggerToast?.(isFr ? 'Impossible de contacter le serveur.' : 'Cannot reach server.', '❌');
+      setQuestions(data.data.questions);
+      setSessionToken(data.data.sessionToken);
+      setCurrentIdx(0);
+      setAnswers([]);
+      setSelectedOption(null);
+      setTimeLeft(TIME_PER_QUESTION);
+      setScreen('quiz');
+    } catch (err) {
       setScreen('intro');
+      triggerToast?.(
+        (isFr ? 'Impossible de démarrer le quiz : ' : 'Could not start the quiz: ') + err.message,
+        '⚠️'
+      );
+    } finally {
+      clearInterval(msgInterval);
     }
-  }, [artisanId, lang, isFr]);
+  }, [artisanId, lang, isFr, loadingMsgs, triggerToast]);
 
   // ── Timeout handler ─────────────────────────────────────────────────────────
   const handleTimeout = useCallback(async () => {
@@ -91,13 +95,12 @@ export default function VerificationQuiz({
     clearInterval(timerRef.current);
     setScreen('timeout');
     try {
-      await fetch('/api/verifications/quiz/submit', {
+      await api('/verifications/quiz/submit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ artisanId, sessionToken, answers: [], timedOut: true }),
+        body: { sessionToken, answers: [], timedOut: true },
       });
-    } catch { /* silent */ }
-  }, [artisanId, sessionToken]);
+    } catch { /* the server also expires unanswered sessions on its own */ }
+  }, [sessionToken]);
 
   // ── Per-question countdown ──────────────────────────────────────────────────
   useEffect(() => {
@@ -130,44 +133,42 @@ export default function VerificationQuiz({
     const newAnswers = [...answers, selectedOption];
     setAnswers(newAnswers);
     setSelectedOption(null);
-    if (currentIdx + 1 >= TOTAL_QUESTIONS) {
+    if (currentIdx + 1 >= (questions.length || TOTAL_QUESTIONS)) {
       submitQuiz(newAnswers);
     } else {
       setCurrentIdx(i => i + 1);
     }
   };
 
-  // ── Submit to backend ───────────────────────────────────────────────────────
+  // ── Submit answers; the server grades them and awards the badge ────────────
   const submitQuiz = async (finalAnswers) => {
     setSubmitting(true);
     setScreen('loading');
-    setLoadingMsg(isFr ? '📊 Correction en cours…' : '📊 Grading your answers…');
+    setLoadingMsg(isFr ? '📊 Correction de vos réponses…' : '📊 Grading your answers…');
+
     try {
-      const res = await fetch('/api/verifications/quiz/submit', {
+      const data = await api('/verifications/quiz/submit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ artisanId, sessionToken, answers: finalAnswers, timedOut: false }),
+        body: { sessionToken, answers: finalAnswers, timedOut: false },
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setResult(data.data);
-        setScreen('result');
-        if (data.data.passed) {
-          onVerified?.(data.data);
-          triggerToast?.(
-            isFr
-              ? `🏅 Badge Vérifié obtenu ! Score : ${data.data.scorePercent}%`
-              : `🏅 Verified Badge earned! Score: ${data.data.scorePercent}%`,
-            '✓'
-          );
-        }
-      } else {
-        triggerToast?.(data.message || 'Error', '❌');
-        setScreen('intro');
+      setResult(data.data);
+      onResult?.(data.data);
+      setScreen('result');
+      if (data.data.passed) {
+        onVerified?.(data.data);
+        triggerToast?.(
+          isFr
+            ? `🏅 Badge Vérifié obtenu ! Score : ${data.data.scorePercent}%`
+            : `🏅 Verified Badge earned! Score: ${data.data.scorePercent}%`,
+          '✓'
+        );
       }
-    } catch {
-      triggerToast?.(isFr ? 'Erreur réseau.' : 'Network error.', '❌');
+    } catch (err) {
       setScreen('intro');
+      triggerToast?.(
+        (isFr ? "Échec de l'envoi du quiz, veuillez recommencer : " : 'Quiz submission failed, please retry: ') + err.message,
+        '⚠️'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -181,7 +182,7 @@ export default function VerificationQuiz({
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={S.overlay}>
+    <div style={isModal ? S.overlay : S.inlineContainer}>
       {/* CSS keyframe injector */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap');
@@ -194,7 +195,7 @@ export default function VerificationQuiz({
         .vq-btn-secondary:hover { background: rgba(255,255,255,0.1) !important; color: #e2e8f0 !important; }
       `}</style>
 
-      <div style={S.modal}>
+      <div style={isModal ? S.modal : S.inlineModal}>
 
         {/* ══ INTRO ══════════════════════════════════════════════════════════ */}
         {screen === 'intro' && (
@@ -222,12 +223,14 @@ export default function VerificationQuiz({
               ))}
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-              <button className="vq-btn-secondary" style={S.btnSecondary} onClick={onClose}>
-                {isFr ? 'Plus tard' : 'Later'}
-              </button>
-              <button className="vq-btn-primary" style={S.btnPrimary} onClick={startQuiz}>
-                🚀 {isFr ? 'Démarrer le test' : 'Start Quiz'}
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', flexWrap: 'wrap', justifyContent: 'center' }}>
+              {onClose && (
+                <button className="vq-btn-secondary" style={S.btnSecondary} onClick={onClose}>
+                  {isFr ? 'Plus tard' : 'Later'}
+                </button>
+              )}
+              <button className="vq-btn-primary" style={{ ...S.btnPrimary, padding: '14px 36px', fontSize: '1rem' }} onClick={startQuiz}>
+                🚀 {isFr ? 'Démarrer le test (10 QCM)' : 'Start Assessment (10 MCQs)'}
               </button>
             </div>
           </div>
@@ -459,26 +462,35 @@ export default function VerificationQuiz({
               </p>
             )}
 
-            <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-              <button className="vq-btn-secondary" style={S.btnSecondary} onClick={onClose}>
-                {isFr ? 'Fermer' : 'Close'}
-              </button>
+            <div style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {onClose && (
+                <button className="vq-btn-secondary" style={S.btnSecondary} onClick={onClose}>
+                  {isFr ? 'Fermer' : 'Close'}
+                </button>
+              )}
               {!result.passed && (
                 <button className="vq-btn-primary" style={S.btnPrimary} onClick={startQuiz}>
                   🔄 {isFr ? 'Réessayer' : 'Try Again'}
                 </button>
               )}
               {result.passed && (
-                <button className="vq-btn-primary" style={{ ...S.btnPrimary, background: 'linear-gradient(135deg, #059669, #22d3a8)' }} onClick={onClose}>
-                  🏅 {isFr ? 'Voir mon profil' : 'View My Profile'}
+                <button
+                  className="vq-btn-primary"
+                  style={{ ...S.btnPrimary, background: 'linear-gradient(135deg, #059669, #22d3a8)' }}
+                  onClick={() => {
+                    if (onComplete) onComplete(result);
+                    else if (onClose) onClose();
+                  }}
+                >
+                  🚀 {onComplete ? (isFr ? 'Continuer vers Étape 4 →' : 'Continue to Step 4 →') : (isFr ? 'Voir mon profil' : 'View My Profile')}
                 </button>
               )}
             </div>
           </div>
         )}
 
-        {/* Close button (hidden during quiz to prevent accidental exit) */}
-        {screen !== 'quiz' && (
+        {/* Close button (hidden during quiz to prevent accidental exit, and only if onClose provided) */}
+        {screen !== 'quiz' && onClose && (
           <button style={S.closeX} onClick={onClose}>✕</button>
         )}
       </div>
@@ -490,6 +502,25 @@ export default function VerificationQuiz({
 // DESIGN TOKENS — Skillora cyber-luxury palette
 // ──────────────────────────────────────────────────────────────────────────────
 const S = {
+  inlineContainer: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0.5rem 0',
+    fontFamily: "'Outfit', 'Inter', sans-serif",
+  },
+  inlineModal: {
+    background: 'linear-gradient(160deg, #0a0f1e 0%, #1a1040 55%, #0a0f1e 100%)',
+    border: '1px solid rgba(167, 139, 250, 0.22)',
+    borderRadius: 20,
+    boxShadow: '0 16px 50px rgba(0,0,0,0.6), 0 0 40px rgba(139,92,246,0.1)',
+    width: '100%',
+    maxWidth: 680,
+    padding: 28,
+    position: 'relative',
+    animation: 'fadeInUp 0.3s ease',
+  },
   overlay: {
     position: 'fixed', inset: 0, zIndex: 9999,
     background: 'rgba(0, 0, 0, 0.82)',

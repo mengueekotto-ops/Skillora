@@ -15,3 +15,16 @@ build/
 .vscode/
 .DS_Store
 Thumbs.db
+# Logs
+*.log
+npm-debug.log*
+
+# User uploads (served by the API, never committed)
+backend/uploads/
+
+# Flutter / Android local build state
+.dart_tool/
+**/.dart_tool/
+**/android/local.properties
+**/ios/Flutter/ephemeral/
+**/macos/Flutter/ephemeral/
